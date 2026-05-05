@@ -73,10 +73,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ~/.local/pipx
-            ~/.local/bin/cyan
-            ~/.local/bin/cgen
-          key: cyan-pyzule-rw-${{ runner.os }}-v1
+            /Users/runner/.local/pipx
+            /Users/runner/.local/bin/cyan
+            /Users/runner/.local/bin/cgen
+          key: cyan-pyzule-rw-${{ runner.os }}-v2
 
       # ── 3. 도구 설치 (캐시 미스 시에만 실제 brew install) ─────────
       - name: Install Build Tools
@@ -153,20 +153,16 @@ jobs:
           echo "IPA 다운로드 완료: $(ls -lh youtube.ipa | awk '{print $5}')"
 
           # ── plist에서 YouTube 버전 추출 ─────────────────────────────
-          # IPA 압축 해제 → Payload/YouTube.app/Info.plist 파싱
-          WORK_DIR=$(mktemp -d)
-          unzip -q youtube.ipa -d "$WORK_DIR"
-
-          # App 디렉토리 위치 탐색 (이름이 달라질 수 있으므로 glob 사용)
-          PLIST=$(find "$WORK_DIR/Payload" -maxdepth 2 -name "Info.plist" | head -1)
-
-          if [[ -n "$PLIST" ]]; then
-            # CFBundleShortVersionString = YouTube 앱 버전 (예: 19.17.3)
-            YT_VERSION=$(plutil -extract CFBundleShortVersionString raw "$PLIST" 2>/dev/null || true)
-            # 파싱 실패 시 CFBundleVersion으로 폴백
+          # unzip -p로 Info.plist만 스트림 추출 → 전체 압축 해제 불필요, 7s→~0s
+          PLIST_PATH=$(unzip -Z1 youtube.ipa "Payload/*.app/Info.plist" 2>/dev/null | head -1)
+          if [[ -n "$PLIST_PATH" ]]; then
+            PLIST_TMP=$(mktemp)
+            unzip -p youtube.ipa "$PLIST_PATH" > "$PLIST_TMP"
+            YT_VERSION=$(plutil -extract CFBundleShortVersionString raw "$PLIST_TMP" 2>/dev/null || true)
             if [[ -z "$YT_VERSION" ]]; then
-              YT_VERSION=$(plutil -extract CFBundleVersion raw "$PLIST" 2>/dev/null || true)
+              YT_VERSION=$(plutil -extract CFBundleVersion raw "$PLIST_TMP" 2>/dev/null || true)
             fi
+            rm -f "$PLIST_TMP"
           fi
 
           # 최후 폴백: URL에서 추출
@@ -175,8 +171,6 @@ jobs:
             YT_VERSION=$(echo "$URL" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | tail -1)
           fi
           if [[ -z "$YT_VERSION" ]]; then YT_VERSION="Unknown"; fi
-
-          rm -rf "$WORK_DIR"
 
           echo "📦 YouTube 버전: $YT_VERSION"
 
@@ -415,7 +409,8 @@ jobs:
             -o "${{ steps.meta.outputs.ipa_name }}" \
             -f $DEBS \
             -n "${{ github.event.inputs.app_name }}" \
-            -b "${{ github.event.inputs.bundle_id }}"
+            -b "${{ github.event.inputs.bundle_id }}" \
+            -c 0
 
       - name: Upload to Release
         uses: softprops/action-gh-release@v2
