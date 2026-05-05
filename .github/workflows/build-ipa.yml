@@ -159,15 +159,26 @@ jobs:
           [[ "${{ github.event.inputs.enable_youloop }}" == "true" ]] && git clone --quiet --depth=1 https://github.com/bhackel/YouLoop.git
           [[ "${{ github.event.inputs.enable_youspeed }}" == "true" ]] && git clone --quiet --depth=1 https://github.com/PoomSmart/YouSpeed.git
           
-          # YTUHD (libvpx 컴파일 경로 보안)
+          # YTUHD: 컴파일 대신 미리 빌드된 라이브러리 사용 (수정본)
           if [[ "${{ github.event.inputs.enable_ytuhd }}" == "true" ]]; then
             git clone --quiet --depth=1 --recurse-submodules https://github.com/PoomSmart/YTUHD.git
+            
+            # 헤더 파일 복사는 유지
             mkdir -p $THEOS/include/vpx && cp YTUHD/vendor/libvpx/vpx/*.h $THEOS/include/vpx/
-            cd YTUHD/vendor/libvpx
-            ./configure --target=arm64-darwin-gcc --disable-examples --disable-tools --disable-docs --disable-unit-tests --disable-vp8 --disable-vp9-encoder --enable-vp9-decoder --enable-pic
-            make -j$(sysctl -n hw.ncpu) libvpx.a
-            mkdir -p ../libvpx_ios && cp libvpx.a ../libvpx_ios/libvpx.a
-            cd ${{ github.workspace }}
+            
+            # [핵심] 컴파일(configure/make) 과정을 생략하고 저장소의 파일을 복사
+            mkdir -p YTUHD/vendor/libvpx_ios
+            if [ -f "vendor/lib/libvpx.a" ]; then
+              cp vendor/lib/libvpx.a YTUHD/vendor/libvpx_ios/libvpx.a
+              echo "✅ 미리 빌드된 libvpx.a를 사용합니다."
+            else
+              echo "⚠️ 경고: 미리 빌드된 파일이 없어 새로 컴파일을 시도합니다."
+              cd YTUHD/vendor/libvpx
+              ./configure --target=arm64-darwin-gcc --disable-examples --disable-tools --disable-docs --disable-unit-tests --disable-vp8 --disable-vp9-encoder --enable-vp9-decoder --enable-pic
+              make -j$(sysctl -n hw.ncpu) libvpx.a
+              cp libvpx.a ../libvpx_ios/libvpx.a
+              cd ${{ github.workspace }}
+            fi
           fi
 
           # YouChooseQuality (로컬라이제이션)
