@@ -103,11 +103,32 @@ jobs:
           mv iPhoneOS16.5.sdk $THEOS/sdks/
           echo "SDKVERSION=16.5" >> $GITHUB_ENV
 
-      # ── 5. 원본 IPA 다운로드 ─────────────────────────────
+      # ── 5. 원본 IPA 다운로드 (Dropbox 자동 변환 로직 추가) ─────────────────────────────
       - name: Download Original IPA
         run: |
-          wget "${{ github.event.inputs.decrypted_ipa_url }}" -O youtube.ipa
-          if [ ! -s youtube.ipa ]; then echo "IPA download failed"; exit 1; fi
+          URL="${{ github.event.inputs.decrypted_ipa_url }}"
+          
+          # 드롭박스 링크일 경우 dl=0을 dl=1로 강제 치환
+          if [[ "$URL" == *"dropbox.com"* ]]; then
+            URL="${URL/dl=0/dl=1}"
+            echo "ℹ️ 드롭박스 링크 감지: 직접 다운로드 모드(dl=1)로 전환합니다."
+          fi
+          
+          # 다운로드 시도
+          wget -q --show-progress "$URL" -O youtube.ipa
+          
+          # 파일 유효성 검사
+          if [ ! -s youtube.ipa ]; then
+            echo "❌ 에러: IPA 파일이 비어 있습니다. URL을 확인하세요."
+            exit 1
+          fi
+          
+          if ! file youtube.ipa | grep -q "Zip archive data"; then
+            echo "❌ 에러: 다운로드된 파일이 유효한 IPA 형식이 아닙니다."
+            echo "현재 파일 내용 요약:"
+            head -n 5 youtube.ipa
+            exit 1
+          fi
 
       # ── 6. 트윅 소스 확보 및 커스텀 패치 ───────────────────
       - name: Prepare Selected Tweaks
@@ -178,21 +199,19 @@ jobs:
             fi
           done
 
-      # ── 8. IPA 인젝션 (Pyzule/Cyan) ──────────────────────
+      # ── 8. IPA 인젝션 (Cyan) ───────────────────────────
       - name: Final Injection
         run: |
-          # 메인 패치 파일 검증[cite: 2]
-          MAIN_TWEAK="tweaks/com.dvntm.ytlite_5.2.1_iphoneos-arm_patch_zarzel.deb"
-          if [ ! -f "$MAIN_TWEAK" ]; then
-            echo "Error: Main tweak not found!"
-            # 패치 파일이 없으면 빌드된 다른 .deb라도 사용 시도
-            EXTRA_TWEAKS=$(find . -maxdepth 1 -name "*.deb" | tr '\n' ' ')
-          else
-            EXTRA_TWEAKS=$(find . -maxdepth 1 -name "*.deb" | tr '\n' ' ')
-          fi
+          # 현재 디렉토리의 모든 .deb 파일 수집 (패치 파일 포함)
+          # 파일이 하나도 없을 경우를 대비해 예외 처리 추가
+          EXTRA_TWEAKS=$(ls *.deb 2>/dev/null | tr '\n' ' ')
           
-          # Cyan 실행 (Pyzule 기반)
-          cyan -i youtube.ipa \
+          if [[ -z "$EXTRA_TWEAKS" ]]; then
+            echo "⚠️ 경고: 주입할 트윅(.deb) 파일이 없습니다."
+          fi
+
+          # 인젝션 실행
+          cyan -i ./youtube.ipa \
                -o "${{ steps.meta.outputs.ipa_name }}" \
                -uwef $EXTRA_TWEAKS \
                -n "${{ github.event.inputs.app_name }}" \
