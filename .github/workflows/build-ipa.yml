@@ -73,14 +73,14 @@ jobs:
           mv sdks/iPhoneOS16.5.sdk $THEOS/sdks/
           echo "SDKVERSION=16.5" >> $GITHUB_ENV
 
-      # ── 5. IPA 다운로드 (Dropbox 차단 방지) ─────────────────────
+      # ── 5. IPA 다운로드 (Dropbox 대응) ─────────────────────
       - name: Download Original IPA
         run: |
           URL="${{ github.event.inputs.decrypted_ipa_url }}"
           [[ "$URL" == *"dropbox.com"* ]] && URL="${URL/dl=0/dl=1}"
           aria2c -x 4 -s 4 -k 1M --user-agent="Mozilla/5.0" --retry-wait=5 --max-tries=10 "$URL" -o youtube.ipa
 
-      # ── 6. 트윅 소스 준비 및 패치 ────────────
+      # ── 6. 트윅 소스 준비 및 헤더 구조화 ────────────
       - name: Prepare Tweaks and Apply Fixes
         run: |
           mkdir -p ${{ github.workspace }}/tweaks_src
@@ -108,23 +108,23 @@ jobs:
           done
           wait
 
-          # 1. CoreImage 헤더 충돌 해결
+          # 1. 헤더 구조화 및 충돌 해결
+          # CoreImage 충돌 방지를 위해 먼저 삭제
           rm -rf PSHeader/CoreImage
           
-          mkdir -p $THEOS/include/YTHeaders
-          cp -R YouTubeHeader/* $THEOS/include/YTHeaders/
-          cp -R PSHeader/* $THEOS/include/
+          # 하이브리드 헤더 구조 생성 (YouTubeHeader/ 폴더 자체와 내부 파일을 모두 인식하게 함)
+          mkdir -p $THEOS/include/YouTubeHeader $THEOS/include/PSHeader
+          cp -R YouTubeHeader/* $THEOS/include/YouTubeHeader/
+          cp -R YouTubeHeader/* $THEOS/include/ # 하위 호환성
+          cp -R PSHeader/* $THEOS/include/PSHeader/
+          cp -R PSHeader/* $THEOS/include/ # 하위 호환성
 
           cp -R . ${{ github.workspace }}/
           cd ${{ github.workspace }}
 
-          # 2. DontEatMyContent 빌드 에러 해결 패치
+          # 2. DontEatMyContent 패치 (이미 검증됨)
           if [ -d "DontEatMyContent" ]; then
-            echo "🔧 Patching DontEatMyContent..."
-            # Tweak.h 선언 수정
             sed -i '' "s/^CGFloat constant;/extern CGFloat constant;/" DontEatMyContent/Tweak.h
-            # Tweak.x 수정: 첫 줄에 변수를 주입하는 대신, 헤더 임포트 뒤에 안전하게 주입
-            # #import <UIKit/UIKit.h> 뒤에 CGFloat constant = 0; 을 넣도록 변경
             sed -i '' '/#import "Tweak.h"/a \
             CGFloat constant = 0;
             ' DontEatMyContent/Tweak.x
