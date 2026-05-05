@@ -253,33 +253,44 @@ jobs:
             perl -i -0pe 's/^(static CGFloat videoAspectRatio)/CGFloat constant = 0.0;\n$1/m' DontEatMyContent/Tweak.x
           fi
 
-      # ── 7. 트윅 컴파일 ──────────────────────────────────
-      - name: Compile Tweaks
+      # ── 7. 트윅 컴파일 및 기존 트윅 수집 ──────────────────────
+      - name: Compile and Collect Tweaks
         run: |
+          mkdir -p ${{ github.workspace }}/ready_packages
+
+          # 7-1. 직접 컴파일하는 트윅들 처리
           for dir in */; do
             if [[ -f "$dir/Makefile" ]]; then
               echo "🛠️ Compiling: $dir"
               cd "$dir"
               make clean package DEBUG=0 FINALPACKAGE=1 SIDELOAD=1 SDKVERSION=16.5
-              if [[ -d "packages" ]]; then
-                mv packages/*.deb ${{ github.workspace }}/
-              fi
+              find . -name "*.deb" -exec cp {} ${{ github.workspace }}/ready_packages/ \;
               cd ..
             fi
           done
 
+          # 7-2. 저장소의 tweaks/ 폴더에 이미 있는 .deb 파일 수집 (핵심)
+          if [[ -d "tweaks" ]]; then
+            echo "📦 tweaks 폴더에서 기존 패치 파일을 복사합니다."
+            cp tweaks/*.deb ${{ github.workspace }}/ready_packages/ 2>/dev/null || true
+          fi
+          
+          echo "✅ 최종 수집된 .deb 목록:"
+          ls -l ${{ github.workspace }}/ready_packages/
+
       # ── 8. IPA 인젝션 (Cyan) ───────────────────────────
       - name: Final Injection
         run: |
-          # 현재 디렉토리의 모든 .deb 파일 수집 (패치 파일 포함)
-          # 파일이 하나도 없을 경우를 대비해 예외 처리 추가
-          EXTRA_TWEAKS=$(ls *.deb 2>/dev/null | tr '\n' ' ')
+          # 수집된 모든 .deb 파일의 전체 경로를 가져옵니다.
+          EXTRA_TWEAKS=$(ls ${{ github.workspace }}/ready_packages/*.deb 2>/dev/null | tr '\n' ' ')
           
           if [[ -z "$EXTRA_TWEAKS" ]]; then
-            echo "⚠️ 경고: 주입할 트윅(.deb) 파일이 없습니다."
+            echo "❌ 에러: 주입할 트윅 파일(.deb)을 찾을 수 없습니다."
+            exit 1
           fi
 
-          # 인젝션 실행
+          echo "🚀 주입 대상: $EXTRA_TWEAKS"
+
           cyan -i ./youtube.ipa \
                -o "${{ steps.meta.outputs.ipa_name }}" \
                -uwef $EXTRA_TWEAKS \
