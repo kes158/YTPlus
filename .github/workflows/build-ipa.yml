@@ -111,7 +111,7 @@ jobs:
           [[ "$URL" == *"dropbox.com"* ]] && URL="${URL/dl=0/dl=1}"
           aria2c -x 16 -s 16 -k 1M --console-log-level=warn "$URL" -o youtube.ipa
 
-      # ── 6. [NEW] 스마트 트윅 소스 관리 (캐싱 및 증분 업데이트) ────────────
+      # ── 6. 스마트 트윅 소스 관리 (캐싱 및 증분 업데이트) ────────────
       - name: Cache Tweaks Source
         id: cache-tweaks
         uses: actions/cache@v4
@@ -125,28 +125,30 @@ jobs:
           mkdir -p ${{ github.workspace }}/tweaks_src
           cd ${{ github.workspace }}/tweaks_src
 
-          # 필수 헤더 및 트윅 리스트 정의
-          declare -A REPOS=(
-            ["YouTubeHeader"]="https://github.com/PoomSmart/YouTubeHeader.git"
-            ["PSHeader"]="https://github.com/PoomSmart/PSHeader.git"
-            ["YouGroupSettings"]="https://github.com/PoomSmart/YouGroupSettings.git"
-            ["YTVideoOverlay"]="https://github.com/PoomSmart/YTVideoOverlay.git"
+          # 필수 헤더 및 트윅 리스트 (이름|URL 형식)
+          REPOS=(
+            "YouTubeHeader|https://github.com/PoomSmart/YouTubeHeader.git"
+            "PSHeader|https://github.com/PoomSmart/PSHeader.git"
+            "YouGroupSettings|https://github.com/PoomSmart/YouGroupSettings.git"
+            "YTVideoOverlay|https://github.com/PoomSmart/YTVideoOverlay.git"
           )
 
           # 선택된 트윅 추가
-          [[ "${{ github.event.inputs.enable_youpip }}" == "true" ]] && REPOS+=(["YouPiP"]="https://github.com/PoomSmart/YouPiP.git")
-          [[ "${{ github.event.inputs.enable_yq }}" == "true" ]] && REPOS+=(["YouQuality"]="https://github.com/PoomSmart/YouQuality.git")
-          [[ "${{ github.event.inputs.enable_ryd }}" == "true" ]] && REPOS+=(["Return-YouTube-Dislikes"]="https://github.com/PoomSmart/Return-YouTube-Dislikes.git")
-          [[ "${{ github.event.inputs.enable_ytabc }}" == "true" ]] && REPOS+=(["YTABConfig"]="https://github.com/PoomSmart/YTABConfig.git")
-          [[ "${{ github.event.inputs.enable_youloop }}" == "true" ]] && REPOS+=(["YouLoop"]="https://github.com/bhackel/YouLoop.git")
-          [[ "${{ github.event.inputs.enable_youspeed }}" == "true" ]] && REPOS+=(["YouSpeed"]="https://github.com/PoomSmart/YouSpeed.git")
-          [[ "${{ github.event.inputs.enable_demc }}" == "true" ]] && REPOS+=(["DontEatMyContent"]="https://github.com/therealFoxster/DontEatMyContent.git")
-          [[ "${{ github.event.inputs.enable_ycq }}" == "true" ]] && REPOS+=(["YouChooseQuality"]="https://github.com/PoomSmart/YouChooseQuality.git")
-          [[ "${{ github.event.inputs.enable_ytuhd }}" == "true" ]] && REPOS+=(["YTUHD"]="https://github.com/PoomSmart/YTUHD.git")
+          [[ "${{ github.event.inputs.enable_youpip }}" == "true" ]] && REPOS+=("YouPiP|https://github.com/PoomSmart/YouPiP.git")
+          [[ "${{ github.event.inputs.enable_yq }}" == "true" ]] && REPOS+=("YouQuality|https://github.com/PoomSmart/YouQuality.git")
+          [[ "${{ github.event.inputs.enable_ryd }}" == "true" ]] && REPOS+=("Return-YouTube-Dislikes|https://github.com/PoomSmart/Return-YouTube-Dislikes.git")
+          [[ "${{ github.event.inputs.enable_ytabc }}" == "true" ]] && REPOS+=("YTABConfig|https://github.com/PoomSmart/YTABConfig.git")
+          [[ "${{ github.event.inputs.enable_youloop }}" == "true" ]] && REPOS+=("YouLoop|https://github.com/bhackel/YouLoop.git")
+          [[ "${{ github.event.inputs.enable_youspeed }}" == "true" ]] && REPOS+=("YouSpeed|https://github.com/PoomSmart/YouSpeed.git")
+          [[ "${{ github.event.inputs.enable_demc }}" == "true" ]] && REPOS+=("DontEatMyContent|https://github.com/therealFoxster/DontEatMyContent.git")
+          [[ "${{ github.event.inputs.enable_ycq }}" == "true" ]] && REPOS+=("YouChooseQuality|https://github.com/PoomSmart/YouChooseQuality.git")
+          [[ "${{ github.event.inputs.enable_ytuhd }}" == "true" ]] && REPOS+=("YTUHD|https://github.com/PoomSmart/YTUHD.git")
 
-          # 병렬 체크 및 업데이트
-          for name in "${!REPOS[@]}"; do
-            url="${REPOS[$name]}"
+          # 병렬 체크 및 업데이트 (Bash 3.2 호환 문법)
+          for repo in "${REPOS[@]}"; do
+            name="${repo%%|*}"
+            url="${repo#*|}"
+            
             if [ ! -d "$name" ]; then
               git clone --quiet --depth=1 "$url" "$name" &
             else
@@ -156,7 +158,7 @@ jobs:
           done
           wait
 
-          # 헤더 배치
+          # 헤더 배치 및 뒷정리
           mkdir -p $THEOS/include/YTHeaders
           cp -r YouTubeHeader/* $THEOS/include/YTHeaders/
           cp -r PSHeader/* $THEOS/include/
@@ -166,7 +168,7 @@ jobs:
             YCQ_BUNDLE=$(find YouChooseQuality/layout -type d -name "*.bundle" 2>/dev/null | head -1)
             if [[ -n "$YCQ_BUNDLE" ]]; then
               mkdir -p "$YCQ_BUNDLE/ko.lproj"
-              echo '"ENABLED" = "활성화";' > "$YCQ_BUNDLE/ko.lproj/Localizable.strings" # 요약본 적용
+              echo '"ENABLED" = "활성화";' > "$YCQ_BUNDLE/ko.lproj/Localizable.strings"
             fi
           fi
 
@@ -174,7 +176,7 @@ jobs:
             sed -i '' "s/^CGFloat constant;/extern CGFloat constant;/" DontEatMyContent/Tweak.h
           fi
 
-          # 빌드를 위해 현재 디렉토리로 복사
+          # 빌드를 위해 워크스페이스 루트로 복사
           find . -maxdepth 1 -type d -not -name "." -exec cp -r {} ${{ github.workspace }}/ \;
 
       # ── 7. 트윅 컴파일 (증분 빌드 고려) ────────────────────────
