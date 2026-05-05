@@ -19,15 +19,15 @@ on:
         type: string
 
       # ── 트윅 선택 옵션 ──────────────────────────
-      enable_youpip:    { description: 'YouPiP',                  default: true, type: boolean }
-      enable_ytuhd:     { description: 'YTUHD',                   default: true, type: boolean }
-      enable_yq:        { description: 'YouQuality',              default: true, type: boolean }
-      enable_ycq:       { description: 'YouChooseQuality',        default: true, type: boolean }
-      enable_ryd:       { description: 'Return YouTube Dislikes', default: true, type: boolean }
-      enable_ytabc:     { description: 'YTABConfig',              default: true, type: boolean }
-      enable_demc:      { description: 'DontEatMyContent',        default: true, type: boolean }
-      enable_youloop:   { description: 'YouLoop',                 default: true, type: boolean }
-      enable_youspeed:  { description: 'YouSpeed',                default: true, type: boolean }
+      enable_youpip:   { description: 'YouPiP',                  default: true, type: boolean }
+      enable_ytuhd:    { description: 'YTUHD',                   default: true, type: boolean }
+      enable_yq:       { description: 'YouQuality',              default: true, type: boolean }
+      enable_ycq:      { description: 'YouChooseQuality',        default: true, type: boolean }
+      enable_ryd:      { description: 'Return YouTube Dislikes', default: true, type: boolean }
+      enable_ytabc:    { description: 'YTABConfig',              default: true, type: boolean }
+      enable_demc:     { description: 'DontEatMyContent',        default: true, type: boolean }
+      enable_youloop:  { description: 'YouLoop',                 default: true, type: boolean }
+      enable_youspeed: { description: 'YouSpeed',                default: true, type: boolean }
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -55,21 +55,45 @@ jobs:
           echo "release_name=YTPlus_5.2.1_${YT_VERSION}" >> "$GITHUB_OUTPUT"
           echo "tag=YTPlus_5.2.1_${YT_VERSION}" >> "$GITHUB_OUTPUT"
 
-      # ── 2. 저장소 체크아웃 (push 권한 포함) ────────────────────────
+      # ── 2. 저장소 체크아웃 ────────────────────────
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
-      # ── 3. 도구 설치 및 PATH 환경 설정 ──────────────────────────
+      # ── 3. Homebrew 캐시 복원 ─────────────────────
+      # brew install make ldid dpkg aria2: 매번 32s → 캐시 히트 시 ~3s
+      - name: Cache Homebrew packages
+        id: brew-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/Homebrew
+            /opt/homebrew/Cellar/make
+            /opt/homebrew/Cellar/ldid
+            /opt/homebrew/Cellar/dpkg
+            /opt/homebrew/Cellar/aria2
+            /opt/homebrew/bin/make
+            /opt/homebrew/bin/ldid
+            /opt/homebrew/bin/dpkg
+            /opt/homebrew/bin/aria2c
+          key: brew-${{ runner.os }}-make-ldid-dpkg-aria2-v1
+
+      # ── 4. 도구 설치 (캐시 미스 시에만 실제 brew install) ─────────
       - name: Install Build Tools
         shell: bash
         run: |
-          brew install make ldid dpkg aria2
+          if [[ "${{ steps.brew-cache.outputs.cache-hit }}" != "true" ]]; then
+            brew install make ldid dpkg aria2
+          else
+            # 캐시 복원 후 심링크 재연결
+            brew link --overwrite make ldid dpkg aria2 2>/dev/null || true
+          fi
           echo "$(brew --prefix make)/libexec/gnubin" >> $GITHUB_PATH
 
-          python3 -m pip install --upgrade pipx --break-system-packages 2>/dev/null || pip3 install --upgrade pipx
+          # cyan(pyzule-rw) 설치
+          python3 -m pip install --upgrade pipx --break-system-packages 2>/dev/null || true
           python3 -m pipx ensurepath
           python3 -m pipx install --force https://github.com/asdfzxcvbn/pyzule-rw/archive/main.zip
 
@@ -83,30 +107,53 @@ jobs:
             ls -la "$CYAN_PATH" || true
             exit 1
           fi
-          echo "cyan 설치 확인: $(which cyan)"
+          echo "cyan 확인: $(which cyan)"
 
-      # ── 4. Theos 및 SDK 설정 ──────────────────────────
-      - name: Setup Theos
+      # ── 5. Theos 캐시 복원 ────────────────────────
+      # git clone theos: 매번 52s → 캐시 히트 시 ~3s
+      - name: Cache Theos
+        id: theos-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/theos
+          key: theos-${{ runner.os }}-v1
+
+      # ── 6. Theos 설치 + SDK 다운로드 + IPA 다운로드 (병렬) ──────────
+      # Theos 설치(52s)와 IPA 다운로드(5s)를 동시에 실행
+      - name: Setup Theos and Download IPA
         shell: bash
         run: |
-          git clone --depth 1 --recurse-submodules https://github.com/theos/theos.git $THEOS
-          mkdir -p $THEOS/sdks
-          git clone --quiet --depth=1 https://github.com/theos/sdks/
-          mv sdks/iPhoneOS16.5.sdk $THEOS/sdks/
           echo "SDKVERSION=16.5" >> $GITHUB_ENV
 
-      # ── 5. IPA 다운로드 ─────────────────────────────────────────
-      - name: Download Original IPA
-        shell: bash
-        run: |
+          # IPA 다운로드 (백그라운드)
           URL="${{ github.event.inputs.decrypted_ipa_url }}"
           [[ "$URL" == *"dropbox.com"* ]] && URL="${URL/dl=0/dl=1}"
-          aria2c -x 4 -s 4 -k 1M --user-agent="Mozilla/5.0" --retry-wait=5 --max-tries=10 "$URL" -o youtube.ipa
+          aria2c -x 4 -s 4 -k 1M --user-agent="Mozilla/5.0" \
+            --retry-wait=5 --max-tries=10 "$URL" -o youtube.ipa &
+          IPA_PID=$!
 
-      # ── 6. 트윅 캐시 확인 및 선택적 클론/빌드 ─────────────────────
-      # 전략: tweaks/ 폴더에 {트윅명}_{SHA8}.deb 형태로 저장
-      #   - 최신 SHA와 일치하는 캐시 있음 → 재사용 (클론/빌드 없음)
-      #   - 없음 → 클론 → 빌드 → tweaks/에 저장 → 저장소에 push
+          # Theos 설치 (캐시 미스 시에만)
+          if [[ "${{ steps.theos-cache.outputs.cache-hit }}" != "true" ]]; then
+            echo "Theos 클론 중..."
+            git clone --depth 1 --recurse-submodules \
+              https://github.com/theos/theos.git $THEOS
+            mkdir -p $THEOS/sdks
+
+            # SDK 다운로드도 백그라운드
+            git clone --quiet --depth=1 https://github.com/theos/sdks/ /tmp/theos-sdks &
+            SDK_PID=$!
+
+            wait $SDK_PID
+            mv /tmp/theos-sdks/iPhoneOS16.5.sdk $THEOS/sdks/
+          else
+            echo "Theos 캐시 히트"
+          fi
+
+          # IPA 다운로드 완료 대기
+          wait $IPA_PID
+          echo "IPA 다운로드 완료: $(ls -lh youtube.ipa | awk '{print $5}')"
+
+      # ── 7. 트윅 캐시 확인 및 선택적 클론/빌드 ────────────────────────
       - name: Check Cache and Build Tweaks Selectively
         shell: bash
         env:
@@ -114,7 +161,6 @@ jobs:
         run: |
           set -e
 
-          # 트윅 정의: "이름|저장소URL|활성화여부"
           REPOS=(
             "YouTubeHeader|https://github.com/PoomSmart/YouTubeHeader.git|true"
             "PSHeader|https://github.com/PoomSmart/PSHeader.git|true"
@@ -134,35 +180,54 @@ jobs:
           CACHE_DIR="${{ github.workspace }}/tweaks"
           BUILD_DIR="${{ github.workspace }}/tweaks_src"
           READY_DIR="${{ github.workspace }}/ready_packages"
+          SHA_STORE=$(mktemp -d)
           mkdir -p "$CACHE_DIR" "$BUILD_DIR" "$READY_DIR"
 
           CACHE_UPDATED=false
-          SHA_STORE=$(mktemp -d)  # NAME→SHA 매핑을 파일로 저장 (bash 3.2 연관배열 미지원 대응)
-
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "  트윅 캐시 확인"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
-          # ── 1단계: SHA 조회 + 캐시 확인 + 클론 예약(병렬) ────────
           CLONE_PIDS=()
           CLONE_LIST=()
+          SHA_PIDS=()
 
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "  SHA 조회 (병렬)"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+          # ── 1단계: SHA 조회 전부 병렬 (순차 7.4s → ~1s) ────────────
           for repo in "${REPOS[@]}"; do
-            NAME="${repo%%|*}";       rest="${repo#*|}"
-            URL="${rest%%|*}";        ENABLED="${rest#*|}"
+            NAME="${repo%%|*}"; rest="${repo#*|}"
+            URL="${rest%%|*}";  ENABLED="${rest#*|}"
+            [[ "$ENABLED" != "true" ]] && continue
+
+            REPO_PATH=$(echo "$URL" | sed 's|https://github.com/||;s|\.git$||')
+            (
+              SHA=$(curl -sf \
+                -H "Authorization: Bearer $GH_TOKEN" \
+                "https://api.github.com/repos/$REPO_PATH/commits?per_page=1" \
+                | python3 -c "import sys,json; d=json.load(sys.stdin); print(d[0]['sha'][:8])" 2>/dev/null \
+                || echo "unknown")
+              echo "$SHA" > "$SHA_STORE/${NAME}.sha"
+            ) &
+            SHA_PIDS+=($!)
+          done
+
+          # SHA 조회 완료 대기
+          for pid in "${SHA_PIDS[@]}"; do wait "$pid" || true; done
+
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "  캐시 확인 + 클론 예약"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+          # ── 2단계: 캐시 확인 + 클론 병렬 예약 ─────────────────────
+          for repo in "${REPOS[@]}"; do
+            NAME="${repo%%|*}"; rest="${repo#*|}"
+            URL="${rest%%|*}";  ENABLED="${rest#*|}"
 
             if [[ "$ENABLED" != "true" ]]; then
               echo "  ⏭  $NAME — 비활성화"
               continue
             fi
 
-            REPO_PATH=$(echo "$URL" | sed 's|https://github.com/||;s|\.git$||')
-            LATEST_SHA=$(curl -sf \
-              -H "Authorization: Bearer $GH_TOKEN" \
-              "https://api.github.com/repos/$REPO_PATH/commits?per_page=1" \
-              | python3 -c "import sys,json; d=json.load(sys.stdin); print(d[0]['sha'][:8])" 2>/dev/null \
-              || echo "unknown")
-
+            LATEST_SHA=$(cat "$SHA_STORE/${NAME}.sha" 2>/dev/null || echo "unknown")
             CACHED=$(ls "$CACHE_DIR/${NAME}_${LATEST_SHA}.deb" 2>/dev/null || true)
 
             if [[ -n "$CACHED" && "$LATEST_SHA" != "unknown" ]]; then
@@ -175,11 +240,10 @@ jobs:
               git clone --quiet --depth=1 --recurse-submodules "$URL" "$BUILD_DIR/$NAME" &
               CLONE_PIDS+=($!)
               CLONE_LIST+=("$NAME")
-              echo "$LATEST_SHA" > "$SHA_STORE/$NAME"  # SHA를 파일로 저장
             fi
           done
 
-          # ── 2단계: 클론 완료 대기 ─────────────────────────────
+          # ── 3단계: 클론 완료 대기 ───────────────────────────────
           if [[ ${#CLONE_PIDS[@]} -gt 0 ]]; then
             echo ""
             echo "  ⏳ 클론 완료 대기 (${#CLONE_PIDS[@]}개)..."
@@ -187,7 +251,7 @@ jobs:
             echo "  모든 클론 완료"
           fi
 
-          # ── 3단계: 헤더 구조화 ────────────────────────────────
+          # ── 4단계: 헤더 구조화 ──────────────────────────────────
           if [[ -d "$BUILD_DIR/YouTubeHeader" ]]; then
             mkdir -p $THEOS/include/YouTubeHeader
             cp -R "$BUILD_DIR/YouTubeHeader/." $THEOS/include/YouTubeHeader/
@@ -200,7 +264,7 @@ jobs:
             cp -R "$BUILD_DIR/PSHeader/." $THEOS/include/
           fi
 
-          # ── 4단계: DontEatMyContent 패치 ──────────────────────
+          # ── 5단계: DontEatMyContent 패치 ────────────────────────
           if [[ -d "$BUILD_DIR/DontEatMyContent" ]]; then
             sed -i '' "s/^CGFloat constant;/extern CGFloat constant;/" \
               "$BUILD_DIR/DontEatMyContent/Tweak.h"
@@ -209,63 +273,79 @@ jobs:
             ' "$BUILD_DIR/DontEatMyContent/Tweak.x"
           fi
 
-          # ── 5단계: 새로 클론된 것만 빌드 ─────────────────────
+          # ── 6단계: 병렬 빌드 (순차 101s → ~35s) ────────────────────
           echo ""
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "  빌드"
+          echo "  빌드 (병렬)"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           export DEBUG=0 FINALPACKAGE=1 SIDELOAD=1 SDKVERSION=16.5
 
+          BUILD_PIDS=()
+          BUILD_NAMES=()
+          HEADER_ONLY="YouTubeHeader PSHeader YouGroupSettings YTVideoOverlay"
+
           for NAME in "${CLONE_LIST[@]}"; do
             # 헤더 전용은 컴파일 불필요
-            if [[ "$NAME" == "YouTubeHeader" || "$NAME" == "PSHeader" || \
-                  "$NAME" == "YouGroupSettings" || "$NAME" == "YTVideoOverlay" ]]; then
-              echo "  📎 $NAME — 헤더/의존성 전용, 빌드 건너뜀"
+            if echo "$HEADER_ONLY" | grep -qw "$NAME"; then
+              echo "  📎 $NAME — 헤더/의존성 전용, 건너뜀"
               continue
             fi
 
             DIR="$BUILD_DIR/$NAME"
-            SHA=$(cat "$SHA_STORE/$NAME" 2>/dev/null || echo "unknown")
+            SHA=$(cat "$SHA_STORE/${NAME}.sha" 2>/dev/null || echo "unknown")
+            [[ ! -d "$DIR" ]] && { echo "  ⚠️  $NAME — 디렉토리 없음"; continue; }
 
-            if [[ ! -d "$DIR" ]]; then
-              echo "  ⚠️  $NAME — 디렉토리 없음"
-              continue
-            fi
+            echo "  🔨 $NAME 빌드 시작 (백그라운드)..."
 
-            echo "  🔨 $NAME 빌드 중..."
-
-            # YTUHD: libvpx 별도 빌드
-            if [[ "$NAME" == "YTUHD" && -d "$DIR/vendor/libvpx" ]]; then
-              pushd "$DIR/vendor/libvpx" > /dev/null
-              ./configure --target=arm64-darwin-gcc \
-                --disable-examples --disable-tools --disable-docs \
-                --enable-vp9-decoder --enable-pic
-              make -j$(sysctl -n hw.ncpu) libvpx.a
-              mkdir -p ../libvpx_ios && cp libvpx.a ../libvpx_ios/
-              popd > /dev/null
-            fi
-
-            pushd "$DIR" > /dev/null
-            if [[ -f "Makefile" ]]; then
-              make clean 2>/dev/null || true
-              if make -j$(sysctl -n hw.ncpu) package 2>&1; then
-                for deb in packages/*.deb; do
-                  [[ -f "$deb" ]] || continue
-                  cp "$deb" "$READY_DIR/"
-                  # 구버전 캐시 제거 후 새 버전 저장
-                  rm -f "$CACHE_DIR/${NAME}_"*.deb
-                  cp "$deb" "$CACHE_DIR/${NAME}_${SHA}.deb"
-                  CACHE_UPDATED=true
-                  echo "  💾 캐시 저장: ${NAME}_${SHA}.deb"
-                done
-              else
-                echo "  ❌ $NAME 빌드 실패"
+            # 각 트윅을 백그라운드에서 병렬 빌드
+            (
+              # YTUHD: libvpx 별도 빌드
+              if [[ "$NAME" == "YTUHD" && -d "$DIR/vendor/libvpx" ]]; then
+                pushd "$DIR/vendor/libvpx" > /dev/null
+                ./configure --target=arm64-darwin-gcc \
+                  --disable-examples --disable-tools --disable-docs \
+                  --enable-vp9-decoder --enable-pic > /dev/null 2>&1
+                make -j$(sysctl -n hw.ncpu) libvpx.a > /dev/null 2>&1
+                mkdir -p ../libvpx_ios && cp libvpx.a ../libvpx_ios/
+                popd > /dev/null
               fi
-            else
-              echo "  ⚠️  $NAME — Makefile 없음"
-            fi
-            popd > /dev/null
+
+              pushd "$DIR" > /dev/null
+              if [[ -f "Makefile" ]]; then
+                make clean > /dev/null 2>&1 || true
+                if make -j$(sysctl -n hw.ncpu) package > /tmp/build_${NAME}.log 2>&1; then
+                  for deb in packages/*.deb; do
+                    [[ -f "$deb" ]] || continue
+                    cp "$deb" "$READY_DIR/"
+                    rm -f "$CACHE_DIR/${NAME}_"*.deb
+                    cp "$deb" "$CACHE_DIR/${NAME}_${SHA}.deb"
+                    # 캐시 갱신 신호 (파일로)
+                    touch "$SHA_STORE/CACHE_UPDATED"
+                    echo "  💾 캐시 저장: ${NAME}_${SHA}.deb"
+                  done
+                  echo "  ✅ $NAME 빌드 완료"
+                else
+                  echo "  ❌ $NAME 빌드 실패"
+                  cat /tmp/build_${NAME}.log | tail -20
+                fi
+              fi
+              popd > /dev/null
+            ) &
+            BUILD_PIDS+=($!)
+            BUILD_NAMES+=("$NAME")
           done
+
+          # 모든 병렬 빌드 완료 대기
+          if [[ ${#BUILD_PIDS[@]} -gt 0 ]]; then
+            echo "  ⏳ 빌드 완료 대기 (${#BUILD_PIDS[@]}개)..."
+            for pid in "${BUILD_PIDS[@]}"; do wait "$pid" || true; done
+            echo "  모든 빌드 완료"
+          fi
+
+          # CACHE_UPDATED 판정
+          if [[ -f "$SHA_STORE/CACHE_UPDATED" ]]; then
+            CACHE_UPDATED=true
+          fi
 
           echo ""
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -275,7 +355,7 @@ jobs:
 
           echo "CACHE_UPDATED=$CACHE_UPDATED" >> $GITHUB_ENV
 
-      # ── 7. 새 캐시가 있으면 저장소에 push ────────────────────────
+      # ── 8. 새 캐시가 있으면 저장소에 push ────────────────────────
       - name: Commit Updated Tweak Cache
         if: env.CACHE_UPDATED == 'true'
         shell: bash
@@ -286,12 +366,11 @@ jobs:
           git commit -m "chore: 트윅 캐시 업데이트 [skip ci]"
           git push
 
-      # ── 8. 인젝션 및 릴리스 ──────────────────────────────────────
+      # ── 9. 인젝션 및 릴리스 ──────────────────────────────────────
       - name: Inject and Release
         shell: bash
         run: |
           CYAN="$CYAN_BIN_DIR/cyan"
-
           if [[ ! -x "$CYAN" ]]; then
             echo "cyan을 찾을 수 없습니다: $CYAN"
             ls -la "$CYAN_BIN_DIR" || true
