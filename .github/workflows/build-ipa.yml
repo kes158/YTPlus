@@ -57,14 +57,21 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # ── 3. 도구 설치 및 PATH 설정 ──────────────────────────
+      # ── 3. 도구 설치 및 PATH 환경 설정 ──────────────────────────
       - name: Install Build Tools
         run: |
           brew install make ldid dpkg aria2
           echo "$(brew --prefix make)/libexec/gnubin" >> $GITHUB_PATH
-          # pyzule 설치 및 실행 경로 등록
+          
+          # pipx로 pyzule 설치
           pipx install --force https://github.com/asdfzxcvbn/pyzule-rw/archive/main.zip
+          
+          # 1. 이후 Step들을 위해 GITHUB_PATH에 추가
           echo "$HOME/.local/bin" >> $GITHUB_PATH
+          
+          # 2. 현재 Step에서 바로 확인하기 위해 PATH에 즉시 반영[cite: 1]
+          export PATH="$HOME/.local/bin:$PATH"
+          which pyzule || echo "pyzule not yet in PATH"
 
       # ── 4. Theos 및 SDK 설정 ──────────────────────────
       - name: Setup Theos
@@ -75,7 +82,7 @@ jobs:
           mv sdks/iPhoneOS16.5.sdk $THEOS/sdks/
           echo "SDKVERSION=16.5" >> $GITHUB_ENV
 
-      # ── 5. IPA 다운로드 (Dropbox 대응) ─────────────────────
+      # ── 5. IPA 다운로드 (Dropbox 차단 대응) ─────────────────────
       - name: Download Original IPA
         run: |
           URL="${{ github.event.inputs.decrypted_ipa_url }}"
@@ -110,7 +117,7 @@ jobs:
           done
           wait
 
-          # 헤더 구조화 및 충돌 해결
+          # 헤더 구조화 (RYD 등 다른 트윅 호환성 확보)[cite: 1]
           rm -rf PSHeader/CoreImage
           mkdir -p $THEOS/include/YouTubeHeader $THEOS/include/PSHeader
           cp -R YouTubeHeader/* $THEOS/include/YouTubeHeader/
@@ -121,7 +128,7 @@ jobs:
           cp -R . ${{ github.workspace }}/
           cd ${{ github.workspace }}
 
-          # DontEatMyContent 빌드 패치
+          # DontEatMyContent 링커 에러 패치[cite: 1]
           if [ -d "DontEatMyContent" ]; then
             sed -i '' "s/^CGFloat constant;/extern CGFloat constant;/" DontEatMyContent/Tweak.h
             sed -i '' '/#import "Tweak.h"/a \
@@ -154,14 +161,14 @@ jobs:
             fi
           done
 
-      # ── 8. 인젝션 및 릴리스 ──────────────────────────
+      # ── 8. 인젝션 및 릴리스 (절대 경로 사용) ──────────────────────────
       - name: Inject and Release
         run: |
-          # 설치된 pyzule 위치 확인용 (선택사항)
-          which pyzule || echo "pyzule not found in PATH"
-          
+          # Step 간 PATH 공유가 안 될 경우를 대비해 직접 경로 지정[cite: 1]
+          PYZULE="$HOME/.local/bin/pyzule"
           DEBS=$(ls ${{ github.workspace }}/ready_packages/*.deb | tr '\n' ' ')
-          pyzule -i ./youtube.ipa -o "${{ steps.meta.outputs.ipa_name }}" -f $DEBS -n "${{ github.event.inputs.app_name }}" -b "${{ github.event.inputs.bundle_id }}"
+          
+          $PYZULE -i ./youtube.ipa -o "${{ steps.meta.outputs.ipa_name }}" -f $DEBS -n "${{ github.event.inputs.app_name }}" -b "${{ github.event.inputs.bundle_id }}"
           
       - name: Upload to Release
         uses: softprops/action-gh-release@v2
