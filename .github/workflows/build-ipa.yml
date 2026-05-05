@@ -19,15 +19,15 @@ on:
         type: string
 
       # ── 트윅 선택 옵션 ──────────────────────────
-      enable_youpip: { description: 'YouPiP', default: true, type: boolean }
-      enable_ytuhd: { description: 'YTUHD', default: true, type: boolean }
-      enable_yq: { description: 'YouQuality', default: true, type: boolean }
-      enable_ycq: { description: 'YouChooseQuality', default: true, type: boolean }
-      enable_ryd: { description: 'Return YouTube Dislikes', default: true, type: boolean }
-      enable_ytabc: { description: 'YTABConfig', default: true, type: boolean }
-      enable_demc: { description: 'DontEatMyContent', default: true, type: boolean }
-      enable_youloop: { description: 'YouLoop', default: true, type: boolean }
-      enable_youspeed: { description: 'YouSpeed', default: true, type: boolean }
+      enable_youpip:    { description: 'YouPiP',                  default: true, type: boolean }
+      enable_ytuhd:     { description: 'YTUHD',                   default: true, type: boolean }
+      enable_yq:        { description: 'YouQuality',              default: true, type: boolean }
+      enable_ycq:       { description: 'YouChooseQuality',        default: true, type: boolean }
+      enable_ryd:       { description: 'Return YouTube Dislikes', default: true, type: boolean }
+      enable_ytabc:     { description: 'YTABConfig',              default: true, type: boolean }
+      enable_demc:      { description: 'DontEatMyContent',        default: true, type: boolean }
+      enable_youloop:   { description: 'YouLoop',                 default: true, type: boolean }
+      enable_youspeed:  { description: 'YouSpeed',                default: true, type: boolean }
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -53,9 +53,12 @@ jobs:
           echo "ipa_name=YTPlus_5.2.1_${YT_VERSION}.ipa" >> "$GITHUB_OUTPUT"
           echo "tag=v${YT_VERSION}-${{ github.run_id }}" >> "$GITHUB_OUTPUT"
 
-      # ── 2. 저장소 체크아웃 ─────────────────────────────
+      # ── 2. 저장소 체크아웃 (push 권한 포함) ────────────────────────
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
       # ── 3. 도구 설치 및 PATH 환경 설정 ──────────────────────────
       - name: Install Build Tools
@@ -63,27 +66,21 @@ jobs:
           brew install make ldid dpkg aria2
           echo "$(brew --prefix make)/libexec/gnubin" >> $GITHUB_PATH
 
-          # pipx 최신화 및 pyzule 설치
           python3 -m pip install --upgrade pipx --break-system-packages 2>/dev/null || pip3 install --upgrade pipx
           python3 -m pipx ensurepath
-
           python3 -m pipx install --force https://github.com/asdfzxcvbn/pyzule-rw/archive/main.zip
 
-          # pipx가 설치한 실제 경로를 탐색해서 GITHUB_ENV/GITHUB_PATH 양쪽에 등록
           PYZULE_PATH=$(python3 -m pipx environment --value PIPX_BIN_DIR 2>/dev/null || echo "$HOME/.local/bin")
           echo "PYZULE_BIN_DIR=$PYZULE_PATH" >> $GITHUB_ENV
           echo "$PYZULE_PATH" >> $GITHUB_PATH
-
-          # 현재 Step에서도 즉시 반영
           export PATH="$PYZULE_PATH:$PATH"
 
-          # 설치 검증 (실패 시 CI 즉시 중단)
           if ! command -v pyzule &>/dev/null; then
-            echo "❌ pyzule 설치 실패! 경로: $PYZULE_PATH"
+            echo "pyzule 설치 실패! 경로: $PYZULE_PATH"
             ls -la "$PYZULE_PATH" || true
             exit 1
           fi
-          echo "✅ pyzule 설치 확인: $(which pyzule)"
+          echo "pyzule 설치 확인: $(which pyzule)"
 
       # ── 4. Theos 및 SDK 설정 ──────────────────────────
       - name: Setup Theos
@@ -94,102 +91,218 @@ jobs:
           mv sdks/iPhoneOS16.5.sdk $THEOS/sdks/
           echo "SDKVERSION=16.5" >> $GITHUB_ENV
 
-      # ── 5. IPA 다운로드 (Dropbox 차단 대응) ─────────────────────
+      # ── 5. IPA 다운로드 ─────────────────────────────────────────
       - name: Download Original IPA
         run: |
           URL="${{ github.event.inputs.decrypted_ipa_url }}"
           [[ "$URL" == *"dropbox.com"* ]] && URL="${URL/dl=0/dl=1}"
           aria2c -x 4 -s 4 -k 1M --user-agent="Mozilla/5.0" --retry-wait=5 --max-tries=10 "$URL" -o youtube.ipa
 
-      # ── 6. 트윅 소스 준비 및 헤더/코드 패치 ────────────
-      - name: Prepare Tweaks and Apply Fixes
+      # ── 6. 트윅 캐시 확인 및 선택적 클론/빌드 ─────────────────────
+      # 전략: tweaks/ 폴더에 {트윅명}_{SHA8}.deb 형태로 저장
+      #   - 최신 SHA와 일치하는 캐시 있음 → 재사용 (클론/빌드 없음)
+      #   - 없음 → 클론 → 빌드 → tweaks/에 저장 → 저장소에 push
+      - name: Check Cache and Build Tweaks Selectively
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          mkdir -p ${{ github.workspace }}/tweaks_src
-          cd ${{ github.workspace }}/tweaks_src
+          set -e
 
+          # 트윅 정의: "이름|저장소URL|활성화여부"
           REPOS=(
-            "YouTubeHeader|https://github.com/PoomSmart/YouTubeHeader.git"
-            "PSHeader|https://github.com/PoomSmart/PSHeader.git"
-            "YouGroupSettings|https://github.com/PoomSmart/YouGroupSettings.git"
-            "YTVideoOverlay|https://github.com/PoomSmart/YTVideoOverlay.git"
-            "DontEatMyContent|https://github.com/therealFoxster/DontEatMyContent.git"
-            "YouPiP|https://github.com/PoomSmart/YouPiP.git"
-            "YouQuality|https://github.com/PoomSmart/YouQuality.git"
-            "Return-YouTube-Dislikes|https://github.com/PoomSmart/Return-YouTube-Dislikes.git"
-            "YTABConfig|https://github.com/PoomSmart/YTABConfig.git"
-            "YouLoop|https://github.com/bhackel/YouLoop.git"
-            "YouSpeed|https://github.com/PoomSmart/YouSpeed.git"
-            "YouChooseQuality|https://github.com/PoomSmart/YouChooseQuality.git"
-            "YTUHD|https://github.com/PoomSmart/YTUHD.git"
+            "YouTubeHeader|https://github.com/PoomSmart/YouTubeHeader.git|true"
+            "PSHeader|https://github.com/PoomSmart/PSHeader.git|true"
+            "YouGroupSettings|https://github.com/PoomSmart/YouGroupSettings.git|true"
+            "YTVideoOverlay|https://github.com/PoomSmart/YTVideoOverlay.git|true"
+            "DontEatMyContent|https://github.com/therealFoxster/DontEatMyContent.git|${{ github.event.inputs.enable_demc }}"
+            "YouPiP|https://github.com/PoomSmart/YouPiP.git|${{ github.event.inputs.enable_youpip }}"
+            "YouQuality|https://github.com/PoomSmart/YouQuality.git|${{ github.event.inputs.enable_yq }}"
+            "Return-YouTube-Dislikes|https://github.com/PoomSmart/Return-YouTube-Dislikes.git|${{ github.event.inputs.enable_ryd }}"
+            "YTABConfig|https://github.com/PoomSmart/YTABConfig.git|${{ github.event.inputs.enable_ytabc }}"
+            "YouLoop|https://github.com/bhackel/YouLoop.git|${{ github.event.inputs.enable_youloop }}"
+            "YouSpeed|https://github.com/PoomSmart/YouSpeed.git|${{ github.event.inputs.enable_youspeed }}"
+            "YouChooseQuality|https://github.com/PoomSmart/YouChooseQuality.git|${{ github.event.inputs.enable_ycq }}"
+            "YTUHD|https://github.com/PoomSmart/YTUHD.git|${{ github.event.inputs.enable_ytuhd }}"
           )
 
+          CACHE_DIR="${{ github.workspace }}/tweaks"
+          BUILD_DIR="${{ github.workspace }}/tweaks_src"
+          READY_DIR="${{ github.workspace }}/ready_packages"
+          mkdir -p "$CACHE_DIR" "$BUILD_DIR" "$READY_DIR"
+
+          CACHE_UPDATED=false
+          declare -A CLONE_SHA   # 클론 예약된 트윅의 SHA 저장
+
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "  트윅 캐시 확인"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+          # ── 1단계: SHA 조회 + 캐시 확인 + 클론 예약(병렬) ────────
+          CLONE_PIDS=()
+          CLONE_LIST=()
+
           for repo in "${REPOS[@]}"; do
-            name="${repo%%|*}"; url="${repo#*|}";
-            git clone --quiet --depth=1 --recurse-submodules "$url" "$name" &
-          done
-          wait
+            NAME="${repo%%|*}";       rest="${repo#*|}"
+            URL="${rest%%|*}";        ENABLED="${rest#*|}"
 
-          # 헤더 구조화 (RYD 등 다른 트윅 호환성 확보)[cite: 1]
-          rm -rf PSHeader/CoreImage
-          mkdir -p $THEOS/include/YouTubeHeader $THEOS/include/PSHeader
-          cp -R YouTubeHeader/* $THEOS/include/YouTubeHeader/
-          cp -R YouTubeHeader/* $THEOS/include/
-          cp -R PSHeader/* $THEOS/include/PSHeader/
-          cp -R PSHeader/* $THEOS/include/
+            if [[ "$ENABLED" != "true" ]]; then
+              echo "  ⏭  $NAME — 비활성화"
+              continue
+            fi
 
-          cp -R . ${{ github.workspace }}/
-          cd ${{ github.workspace }}
+            REPO_PATH=$(echo "$URL" | sed 's|https://github.com/||;s|\.git$||')
+            LATEST_SHA=$(curl -sf \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              "https://api.github.com/repos/$REPO_PATH/commits?per_page=1" \
+              | python3 -c "import sys,json; d=json.load(sys.stdin); print(d[0]['sha'][:8])" 2>/dev/null \
+              || echo "unknown")
 
-          # DontEatMyContent 링커 에러 패치[cite: 1]
-          if [ -d "DontEatMyContent" ]; then
-            sed -i '' "s/^CGFloat constant;/extern CGFloat constant;/" DontEatMyContent/Tweak.h
-            sed -i '' '/#import "Tweak.h"/a \
-            CGFloat constant = 0;
-            ' DontEatMyContent/Tweak.x
-          fi
+            CACHED=$(ls "$CACHE_DIR/${NAME}_${LATEST_SHA}.deb" 2>/dev/null || true)
 
-      # ── 7. 컴파일 및 패키징 ────────────────────────
-      - name: Compile Tweaks
-        run: |
-          mkdir -p ${{ github.workspace }}/ready_packages
-          export DEBUG=0 FINALPACKAGE=1 SIDELOAD=1 SDKVERSION=16.5
-          
-          if [ -d "YTUHD" ]; then
-            cd YTUHD/vendor/libvpx
-            ./configure --target=arm64-darwin-gcc --disable-examples --disable-tools --disable-docs --enable-vp9-decoder --enable-pic
-            make -j$(sysctl -n hw.ncpu) libvpx.a
-            mkdir -p ../libvpx_ios && cp libvpx.a ../libvpx_ios/
-            cd ${{ github.workspace }}
-          fi
-
-          for dir in */; do
-            if [[ -f "$dir/Makefile" && "$dir" != "theos/" ]]; then
-              echo "🔨 Building $dir..."
-              cd "$dir"
-              make clean
-              make -j$(sysctl -n hw.ncpu) package
-              cp packages/*.deb ${{ github.workspace }}/ready_packages/ 2>/dev/null || true
-              cd ${{ github.workspace }}
+            if [[ -n "$CACHED" && "$LATEST_SHA" != "unknown" ]]; then
+              echo "  ✅ $NAME — 캐시 히트 (${LATEST_SHA})"
+              cp "$CACHED" "$READY_DIR/"
+            else
+              [[ "$LATEST_SHA" == "unknown" ]] \
+                && echo "  ⚠️  $NAME — SHA 조회 실패, 클론 예약" \
+                || echo "  🔄 $NAME — 새 버전 (${LATEST_SHA}), 클론 예약"
+              git clone --quiet --depth=1 --recurse-submodules "$URL" "$BUILD_DIR/$NAME" &
+              CLONE_PIDS+=($!)
+              CLONE_LIST+=("$NAME")
+              CLONE_SHA[$NAME]="$LATEST_SHA"
             fi
           done
 
-      # ── 8. 인젝션 및 릴리스 (절대 경로 사용) ──────────────────────────
+          # ── 2단계: 클론 완료 대기 ─────────────────────────────
+          if [[ ${#CLONE_PIDS[@]} -gt 0 ]]; then
+            echo ""
+            echo "  ⏳ 클론 완료 대기 (${#CLONE_PIDS[@]}개)..."
+            for pid in "${CLONE_PIDS[@]}"; do wait "$pid" || true; done
+            echo "  모든 클론 완료"
+          fi
+
+          # ── 3단계: 헤더 구조화 ────────────────────────────────
+          if [[ -d "$BUILD_DIR/YouTubeHeader" ]]; then
+            mkdir -p $THEOS/include/YouTubeHeader
+            cp -R "$BUILD_DIR/YouTubeHeader/." $THEOS/include/YouTubeHeader/
+            cp -R "$BUILD_DIR/YouTubeHeader/." $THEOS/include/
+          fi
+          if [[ -d "$BUILD_DIR/PSHeader" ]]; then
+            rm -rf "$BUILD_DIR/PSHeader/CoreImage"
+            mkdir -p $THEOS/include/PSHeader
+            cp -R "$BUILD_DIR/PSHeader/." $THEOS/include/PSHeader/
+            cp -R "$BUILD_DIR/PSHeader/." $THEOS/include/
+          fi
+
+          # ── 4단계: DontEatMyContent 패치 ──────────────────────
+          if [[ -d "$BUILD_DIR/DontEatMyContent" ]]; then
+            sed -i '' "s/^CGFloat constant;/extern CGFloat constant;/" \
+              "$BUILD_DIR/DontEatMyContent/Tweak.h"
+            sed -i '' '/#import "Tweak.h"/a \
+            CGFloat constant = 0;
+            ' "$BUILD_DIR/DontEatMyContent/Tweak.x"
+          fi
+
+          # ── 5단계: 새로 클론된 것만 빌드 ─────────────────────
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "  빌드"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          export DEBUG=0 FINALPACKAGE=1 SIDELOAD=1 SDKVERSION=16.5
+
+          for NAME in "${CLONE_LIST[@]}"; do
+            # 헤더 전용은 컴파일 불필요
+            if [[ "$NAME" == "YouTubeHeader" || "$NAME" == "PSHeader" || \
+                  "$NAME" == "YouGroupSettings" || "$NAME" == "YTVideoOverlay" ]]; then
+              echo "  📎 $NAME — 헤더/의존성 전용, 빌드 건너뜀"
+              continue
+            fi
+
+            DIR="$BUILD_DIR/$NAME"
+            SHA="${CLONE_SHA[$NAME]}"
+
+            if [[ ! -d "$DIR" ]]; then
+              echo "  ⚠️  $NAME — 디렉토리 없음"
+              continue
+            fi
+
+            echo "  🔨 $NAME 빌드 중..."
+
+            # YTUHD: libvpx 별도 빌드
+            if [[ "$NAME" == "YTUHD" && -d "$DIR/vendor/libvpx" ]]; then
+              pushd "$DIR/vendor/libvpx" > /dev/null
+              ./configure --target=arm64-darwin-gcc \
+                --disable-examples --disable-tools --disable-docs \
+                --enable-vp9-decoder --enable-pic
+              make -j$(sysctl -n hw.ncpu) libvpx.a
+              mkdir -p ../libvpx_ios && cp libvpx.a ../libvpx_ios/
+              popd > /dev/null
+            fi
+
+            pushd "$DIR" > /dev/null
+            if [[ -f "Makefile" ]]; then
+              make clean 2>/dev/null || true
+              if make -j$(sysctl -n hw.ncpu) package 2>&1; then
+                for deb in packages/*.deb; do
+                  [[ -f "$deb" ]] || continue
+                  cp "$deb" "$READY_DIR/"
+                  # 구버전 캐시 제거 후 새 버전 저장
+                  rm -f "$CACHE_DIR/${NAME}_"*.deb
+                  cp "$deb" "$CACHE_DIR/${NAME}_${SHA}.deb"
+                  CACHE_UPDATED=true
+                  echo "  💾 캐시 저장: ${NAME}_${SHA}.deb"
+                done
+              else
+                echo "  ❌ $NAME 빌드 실패"
+              fi
+            else
+              echo "  ⚠️  $NAME — Makefile 없음"
+            fi
+            popd > /dev/null
+          done
+
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "  주입할 .deb 목록"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          ls -lh "$READY_DIR/"
+
+          echo "CACHE_UPDATED=$CACHE_UPDATED" >> $GITHUB_ENV
+
+      # ── 7. 새 캐시가 있으면 저장소에 push ────────────────────────
+      - name: Commit Updated Tweak Cache
+        if: env.CACHE_UPDATED == 'true'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add tweaks/*.deb
+          git commit -m "chore: 트윅 캐시 업데이트 [skip ci]"
+          git push
+
+      # ── 8. 인젝션 및 릴리스 ──────────────────────────────────────
       - name: Inject and Release
         run: |
-          # GITHUB_ENV로 전달된 PYZULE_BIN_DIR 사용 (Step간 PATH 공유 문제 완전 해결)
           PYZULE="$PYZULE_BIN_DIR/pyzule"
-          
+
           if [[ ! -x "$PYZULE" ]]; then
-            echo "❌ pyzule을 찾을 수 없습니다: $PYZULE"
-            echo "PYZULE_BIN_DIR=$PYZULE_BIN_DIR"
+            echo "pyzule을 찾을 수 없습니다: $PYZULE"
             ls -la "$PYZULE_BIN_DIR" || true
             exit 1
           fi
-          
-          DEBS=$(ls ${{ github.workspace }}/ready_packages/*.deb | tr '\n' ' ')
-          
-          "$PYZULE" -i ./youtube.ipa -o "${{ steps.meta.outputs.ipa_name }}" -f $DEBS -n "${{ github.event.inputs.app_name }}" -b "${{ github.event.inputs.bundle_id }}"
-          
+
+          DEBS=$(ls ${{ github.workspace }}/ready_packages/*.deb 2>/dev/null | tr '\n' ' ')
+          if [[ -z "$DEBS" ]]; then
+            echo "주입할 .deb 파일이 없습니다!"
+            exit 1
+          fi
+
+          "$PYZULE" \
+            -i ./youtube.ipa \
+            -o "${{ steps.meta.outputs.ipa_name }}" \
+            -f $DEBS \
+            -n "${{ github.event.inputs.app_name }}" \
+            -b "${{ github.event.inputs.bundle_id }}"
+
       - name: Upload to Release
         uses: softprops/action-gh-release@v2
         with:
