@@ -133,7 +133,6 @@ jobs:
             "YTVideoOverlay|https://github.com/PoomSmart/YTVideoOverlay.git"
           )
 
-          # 선택된 트윅 추가 (Bash 3.2 호환)
           [[ "${{ github.event.inputs.enable_youpip }}" == "true" ]] && REPOS+=("YouPiP|https://github.com/PoomSmart/YouPiP.git")
           [[ "${{ github.event.inputs.enable_yq }}" == "true" ]] && REPOS+=("YouQuality|https://github.com/PoomSmart/YouQuality.git")
           [[ "${{ github.event.inputs.enable_ryd }}" == "true" ]] && REPOS+=("Return-YouTube-Dislikes|https://github.com/PoomSmart/Return-YouTube-Dislikes.git")
@@ -144,53 +143,57 @@ jobs:
           [[ "${{ github.event.inputs.enable_ycq }}" == "true" ]] && REPOS+=("YouChooseQuality|https://github.com/PoomSmart/YouChooseQuality.git")
           [[ "${{ github.event.inputs.enable_ytuhd }}" == "true" ]] && REPOS+=("YTUHD|https://github.com/PoomSmart/YTUHD.git")
 
-          # 병렬 업데이트 로직 강화 (서브모듈 포함)
+          # 병렬 업데이트 수행
           for repo in "${REPOS[@]}"; do
             name="${repo%%|*}"
             url="${repo#*|}"
-            
             if [ ! -d "$name" ]; then
-              # YTUHD는 서브모듈(libvpx)이 필수이므로 재귀 클론
               if [[ "$name" == "YTUHD" ]]; then
                 git clone --quiet --depth=1 --recurse-submodules --shallow-submodules "$url" "$name" &
               else
                 git clone --quiet --depth=1 "$url" "$name" &
               fi
             else
-              (cd "$name" && git fetch --quiet origin && \
-               [[ $(git rev-parse HEAD) != $(git rev-parse @{u}) ]] && git pull --quiet --recurse-submodules || echo "✅ $name is up-to-date.") &
+              (cd "$name" && git fetch --quiet origin && git pull --quiet --recurse-submodules || echo "✅ $name is up-to-date.") &
             fi
           done
           wait
 
-          # 헤더 배치
+          # 헤더를 Theos include 폴더로 배치
           mkdir -p $THEOS/include/YTHeaders
-          cp -R YouTubeHeader/* $THEOS/include/YTHeaders/
-          cp -R PSHeader/* $THEOS/include/
+          [ -d "YouTubeHeader" ] && cp -R YouTubeHeader/* $THEOS/include/YTHeaders/
+          [ -d "PSHeader" ] && cp -R PSHeader/* $THEOS/include/
 
-          # 워크스페이스 루트로 소스 이동 (숨김 파일 포함)
-          for dir in */; do
-            [[ "$dir" == "theos/" ]] && continue
-            cp -R "$dir" "${{ github.workspace }}/" 2>/dev/null || true
-          done
+          # 모든 소스를 워크스페이스 루트로 복사
+          cp -R . ${{ github.workspace }}/
 
-          # 패치 로직 수행 (워크스페이스 기준)
+          # 워크스페이스 루트로 이동하여 패치 진행
           cd ${{ github.workspace }}
+          
+          # 1. YCQ 패치
           if [[ "${{ github.event.inputs.enable_ycq }}" == "true" ]]; then
             YCQ_BUNDLE=$(find YouChooseQuality/layout -type d -name "*.bundle" 2>/dev/null | head -1)
-            if [[ -n "$YCQ_BUNDLE" ]]; then
+            if [ -n "$YCQ_BUNDLE" ]; then
               mkdir -p "$YCQ_BUNDLE/ko.lproj"
               echo '"ENABLED" = "활성화";' > "$YCQ_BUNDLE/ko.lproj/Localizable.strings"
             fi
           fi
-          [[ "${{ github.event.inputs.enable_demc }}" == "true" ]] && sed -i '' "s/^CGFloat constant;/extern CGFloat constant;/" DontEatMyContent/Tweak.h
+
+          # 2. DEMC 패치 (파일 존재 여부 확인 후 실행)
+          if [[ "${{ github.event.inputs.enable_demc }}" == "true" ]]; then
+            if [ -f "DontEatMyContent/Tweak.h" ]; then
+              sed -i '' "s/^CGFloat constant;/extern CGFloat constant;/" DontEatMyContent/Tweak.h
+              echo "✅ Applied build fix to DontEatMyContent"
+            else
+              echo "⚠️ Warning: DontEatMyContent/Tweak.h not found."
+            fi
+          fi
 
       # ── 7. 트윅 컴파일 (YTUHD 종속성 처리) ────────────────────────
       - name: Compile YTUHD Dependency
         if: github.event.inputs.enable_ytuhd == 'true'
         run: |
-          cd YTUHD/vendor/libvpx
-          # libvpx.a가 없거나 업데이트가 필요할 때만 컴파일
+          cd ${{ github.workspace }}/YTUHD/vendor/libvpx
           if [ ! -f "../libvpx_ios/libvpx.a" ]; then
             chmod +x configure
             ./configure --target=arm64-darwin-gcc --disable-examples --disable-tools --disable-docs --disable-unit-tests --disable-vp8 --disable-vp9-encoder --enable-vp9-decoder --enable-pic
@@ -203,7 +206,6 @@ jobs:
           mkdir -p ${{ github.workspace }}/ready_packages
           export DEBUG=0 FINALPACKAGE=1 SIDELOAD=1 SDKVERSION=16.5
           for dir in */; do
-            # Makefile이 있고 빌드 대상인 폴더만 처리
             if [[ -f "$dir/Makefile" && "$dir" != "theos/" && "$dir" != "tweaks_src/" ]]; then
               echo "🔨 Compiling $dir..."
               make -C "$dir" -j$(sysctl -n hw.ncpu) package
