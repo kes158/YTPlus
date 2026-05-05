@@ -136,7 +136,7 @@ jobs:
           mkdir -p "$CACHE_DIR" "$BUILD_DIR" "$READY_DIR"
 
           CACHE_UPDATED=false
-          declare -A CLONE_SHA   # 클론 예약된 트윅의 SHA 저장
+          SHA_STORE=$(mktemp -d)  # NAME→SHA 매핑을 파일로 저장 (bash 3.2 연관배열 미지원 대응)
 
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo "  트윅 캐시 확인"
@@ -174,7 +174,7 @@ jobs:
               git clone --quiet --depth=1 --recurse-submodules "$URL" "$BUILD_DIR/$NAME" &
               CLONE_PIDS+=($!)
               CLONE_LIST+=("$NAME")
-              CLONE_SHA[$NAME]="$LATEST_SHA"
+              echo "$LATEST_SHA" > "$SHA_STORE/$NAME"  # SHA를 파일로 저장
             fi
           done
 
@@ -224,7 +224,7 @@ jobs:
             fi
 
             DIR="$BUILD_DIR/$NAME"
-            SHA="${CLONE_SHA[$NAME]}"
+            SHA=$(cat "$SHA_STORE/$NAME" 2>/dev/null || echo "unknown")
 
             if [[ ! -d "$DIR" ]]; then
               echo "  ⚠️  $NAME — 디렉토리 없음"
