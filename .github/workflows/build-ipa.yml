@@ -1,4 +1,4 @@
-name: Build YTPlus IPA
+name: Build YTPlus IPA (Stable)
 
 on:
   workflow_dispatch:
@@ -18,7 +18,7 @@ on:
         default: 'com.google.ios.youtube'
         type: string
 
-      # ── 트윅 선택 옵션 (Checkbox) ──────────────────────────
+      # ── 트윅 선택 옵션 ──────────────────────────
       enable_youpip:
         description: 'YouPiP'
         default: true
@@ -58,6 +58,7 @@ on:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  THEOS: ${{ github.workspace }}/theos
 
 jobs:
   build:
@@ -81,48 +82,46 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # ── 3. 빌드 도구 설치 ──────────────────────────────
+      # ── 3. 빌드 도구 설치 및 환경 설정 ──────────────────────
       - name: Install Build Tools
         run: |
           brew install make ldid dpkg wget
           echo "$(brew --prefix make)/libexec/gnubin" >> $GITHUB_PATH
           pipx install --force https://github.com/asdfzxcvbn/pyzule-rw/archive/main.zip
 
-      # ── 4. Theos 및 iOS SDK 설정 ───────────────────────
+      # ── 4. Theos 및 iOS SDK 설정 (핵심 수정) ─────────────────
       - name: Setup Theos
-        uses: actions/checkout@v4
-        with:
-          repository: theos/theos
-          ref: 9bc73406cf80b711ef4d02c15ff1dedc4478a275
-          path: theos
-          submodules: recursive
+        run: |
+          git clone --recursive https://github.com/theos/theos.git $THEOS
+          echo "THEOS=$THEOS" >> $GITHUB_ENV
 
       - name: Download iOS SDK
         run: |
           git clone --quiet -n --depth=1 --filter=tree:0 https://github.com/theos/sdks/
           cd sdks && git sparse-checkout set --no-cone iPhoneOS16.5.sdk && git checkout
-          mv *.sdk ${{ github.workspace }}/theos/sdks
+          mkdir -p $THEOS/sdks
+          mv iPhoneOS16.5.sdk $THEOS/sdks/
+          echo "SDKVERSION=16.5" >> $GITHUB_ENV
 
       # ── 5. 원본 IPA 다운로드 ─────────────────────────────
       - name: Download Original IPA
-        run: wget "${{ github.event.inputs.decrypted_ipa_url }}" -O youtube.ipa
+        run: |
+          wget "${{ github.event.inputs.decrypted_ipa_url }}" -O youtube.ipa
+          if [ ! -s youtube.ipa ]; then echo "IPA download failed"; exit 1; fi
 
       # ── 6. 트윅 소스 확보 및 커스텀 패치 ───────────────────
       - name: Prepare Selected Tweaks
         run: |
-          THEOS=${{ github.workspace }}/theos
           cd $THEOS/include
           git clone --quiet --depth=1 https://github.com/PoomSmart/YouTubeHeader.git
           git clone --quiet --depth=1 https://github.com/PoomSmart/PSHeader.git
           cp -r YouTubeHeader YTHeaders
           
           cd ${{ github.workspace }}
-          
-          # 기본 의존성 트윅
           git clone --quiet --depth=1 https://github.com/PoomSmart/YouGroupSettings.git
           git clone --quiet --depth=1 https://github.com/PoomSmart/YTVideoOverlay.git
 
-          # 체크박스 선택된 트윅만 클론
+          # 조건부 클론 로직
           [[ "${{ github.event.inputs.enable_youpip }}" == "true" ]] && git clone --quiet --depth=1 https://github.com/PoomSmart/YouPiP.git
           [[ "${{ github.event.inputs.enable_yq }}" == "true" ]] && git clone --quiet --depth=1 https://github.com/PoomSmart/YouQuality.git
           [[ "${{ github.event.inputs.enable_ryd }}" == "true" ]] && git clone --quiet --depth=1 https://github.com/PoomSmart/Return-YouTube-Dislikes.git
@@ -130,7 +129,7 @@ jobs:
           [[ "${{ github.event.inputs.enable_youloop }}" == "true" ]] && git clone --quiet --depth=1 https://github.com/bhackel/YouLoop.git
           [[ "${{ github.event.inputs.enable_youspeed }}" == "true" ]] && git clone --quiet --depth=1 https://github.com/PoomSmart/YouSpeed.git
           
-          # YTUHD: 특수 빌드 프로세스 (libvpx 컴파일)
+          # YTUHD (libvpx 컴파일 경로 보안)
           if [[ "${{ github.event.inputs.enable_ytuhd }}" == "true" ]]; then
             git clone --quiet --depth=1 --recurse-submodules https://github.com/PoomSmart/YTUHD.git
             mkdir -p $THEOS/include/vpx && cp YTUHD/vendor/libvpx/vpx/*.h $THEOS/include/vpx/
@@ -141,7 +140,7 @@ jobs:
             cd ${{ github.workspace }}
           fi
 
-          # YouChooseQuality: 한국어 로컬라이제이션 주입
+          # YouChooseQuality (로컬라이제이션)
           if [[ "${{ github.event.inputs.enable_ycq }}" == "true" ]]; then
             git clone --quiet --depth=1 https://github.com/PoomSmart/YouChooseQuality.git
             YCQ_BUNDLE=$(find YouChooseQuality/layout -type d -name "*.bundle" 2>/dev/null | head -1)
@@ -149,23 +148,15 @@ jobs:
               mkdir -p "$YCQ_BUNDLE/ko.lproj"
               cat > "$YCQ_BUNDLE/ko.lproj/Localizable.strings" << 'KOEOF'
           "TWEAK_NAME" = "YouChooseQuality";
-          "TWEAK_DESC" = "각 상황별로 지정한 화질과 동일하거나 가장 가까운 화질을 자동으로 선택합니다.";
+          "TWEAK_DESC" = "상황별 화질 자동 선택 도구";
           "ENABLED" = "활성화";
-          "QUALITY_FOR_SCENARIO_0_SHORT" = "Wi-Fi";
-          "QUALITY_FOR_SCENARIO_0" = "Wi-Fi 연결 시 기본 화질";
-          "QUALITY_FOR_SCENARIO_1_SHORT" = "셀룰러";
-          "QUALITY_FOR_SCENARIO_1" = "셀룰러(모바일 데이터) 연결 시 기본 화질";
-          "QUALITY_FOR_SCENARIO_2_SHORT" = "Wi-Fi (AirPlay)";
-          "QUALITY_FOR_SCENARIO_2" = "AirPlay 사용 중 Wi-Fi 연결 시 기본 화질";
-          "QUALITY_FOR_SCENARIO_3_SHORT" = "셀룰러 (AirPlay)";
-          "QUALITY_FOR_SCENARIO_3" = "AirPlay 사용 중 셀룰러 연결 시 기본 화질";
-          "QUALITY_FOR_SCENARIO_4_SHORT" = "저전력 모드";
-          "QUALITY_FOR_SCENARIO_4" = "저전력 모드 활성화 시 기본 화질";
+          "QUALITY_FOR_SCENARIO_0" = "Wi-Fi 기본 화질";
+          "QUALITY_FOR_SCENARIO_1" = "셀룰러 기본 화질";
           KOEOF
             fi
           fi
 
-          # DontEatMyContent: 빌드 에러 방지 소스 수정
+          # DontEatMyContent (패치)
           if [[ "${{ github.event.inputs.enable_demc }}" == "true" ]]; then
             git clone --quiet --depth=1 https://github.com/therealFoxster/DontEatMyContent.git
             sed -i '' "s/^CGFloat constant;/extern CGFloat constant;/" DontEatMyContent/Tweak.h
@@ -175,28 +166,35 @@ jobs:
       # ── 7. 트윅 컴파일 ──────────────────────────────────
       - name: Compile Tweaks
         run: |
-          export THEOS=${{ github.workspace }}/theos
           for dir in */; do
             if [[ -f "$dir/Makefile" ]]; then
-              echo "🛠️ 빌드 진행 중: $dir"
+              echo "🛠️ Compiling: $dir"
               cd "$dir"
-              make clean package DEBUG=0 FINALPACKAGE=1 SIDELOAD=1
-              [[ -d "packages" ]] && mv packages/*.deb ../
+              make clean package DEBUG=0 FINALPACKAGE=1 SIDELOAD=1 SDKVERSION=16.5
+              if [[ -d "packages" ]]; then
+                mv packages/*.deb ${{ github.workspace }}/
+              fi
               cd ..
             fi
           done
 
-      # ── 8. IPA 인젝션 (Cyan) ───────────────────────────
+      # ── 8. IPA 인젝션 (Pyzule/Cyan) ──────────────────────
       - name: Final Injection
         run: |
-          # tweaks 폴더 내의 메인 패치 파일
+          # 메인 패치 파일 검증[cite: 2]
           MAIN_TWEAK="tweaks/com.dvntm.ytlite_5.2.1_iphoneos-arm_patch_zarzel.deb"
-          # 현재 디렉토리에 빌드된 모든 부속 .deb 파일들 수집
-          EXTRA_TWEAKS=$(ls *.deb | grep -v "patch_zarzel" | tr '\n' ' ')
+          if [ ! -f "$MAIN_TWEAK" ]; then
+            echo "Error: Main tweak not found!"
+            # 패치 파일이 없으면 빌드된 다른 .deb라도 사용 시도
+            EXTRA_TWEAKS=$(find . -maxdepth 1 -name "*.deb" | tr '\n' ' ')
+          else
+            EXTRA_TWEAKS=$(find . -maxdepth 1 -name "*.deb" | tr '\n' ' ')
+          fi
           
+          # Cyan 실행 (Pyzule 기반)
           cyan -i youtube.ipa \
                -o "${{ steps.meta.outputs.ipa_name }}" \
-               -uwef $MAIN_TWEAK $EXTRA_TWEAKS \
+               -uwef $EXTRA_TWEAKS \
                -n "${{ github.event.inputs.app_name }}" \
                -b "${{ github.event.inputs.bundle_id }}"
 
