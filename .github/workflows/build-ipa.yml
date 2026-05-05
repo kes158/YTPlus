@@ -171,14 +171,9 @@ jobs:
         run: |
           wget "${{ github.event.inputs.decrypted_ipa_url }}" --no-verbose -O youtube.ipa
 
-      # ── 9. YTLite deb 다운로드 ─────────────────────────────
-      - name: Download YTLite deb
-        run: |
-          YTLITE_VER="${{ github.event.inputs.ytplus_version }}"
-          wget "https://github.com/dayanch96/YTLite/releases/download/v${YTLITE_VER}/com.dvntm.ytlite_${YTLITE_VER}_iphoneos-arm.deb" \
-            --no-verbose -O ytplus.deb
 
-      # ── 10. 공통 헤더 클론 ─────────────────────────────────
+
+      # ── 9. 공통 헤더 클론 ─────────────────────────────────
       - name: Clone shared headers
         run: |
           THEOS=${{ github.workspace }}/theos
@@ -190,7 +185,7 @@ jobs:
             cp -r YouTubeHeader YTHeaders
           fi
 
-      # ── 11. 트윅 클론 ──────────────────────────────────────
+      # ── 10. 트윅 클론 ──────────────────────────────────────
       - name: Clone YouGroupSettings
         if: ${{ inputs.enable_youpip || inputs.enable_ytuhd || inputs.enable_yq || inputs.enable_ycq || inputs.enable_ryd || inputs.enable_demc || inputs.enable_youloop || inputs.enable_youspeed }}
         run: git clone --quiet --depth=1 https://github.com/PoomSmart/YouGroupSettings.git
@@ -274,7 +269,7 @@ jobs:
         if: ${{ inputs.enable_youspeed }}
         run: git clone --quiet --depth=1 https://github.com/PoomSmart/YouSpeed.git
 
-      # ── 12. 트윅 빌드 ──────────────────────────────────────
+      # ── 11. 트윅 빌드 ──────────────────────────────────────
       - name: Build YouGroupSettings
         if: ${{ inputs.enable_youpip || inputs.enable_ytuhd || inputs.enable_yq || inputs.enable_ycq || inputs.enable_ryd || inputs.enable_demc || inputs.enable_youloop || inputs.enable_youspeed }}
         run: |
@@ -352,7 +347,7 @@ jobs:
           cd YouSpeed && make clean package DEBUG=0 FINALPACKAGE=1
           mv packages/*.deb ../youspeed.deb
 
-      # ── 13. Open in YouTube Safari extension ───────────────
+      # ── 12. Open in YouTube Safari extension ───────────────
       - name: Clone Open in YouTube Safari extension
         if: ${{ inputs.include_open_youtube }}
         run: |
@@ -363,7 +358,7 @@ jobs:
           git checkout --quiet
           find . -maxdepth 1 -type d -name "*.appex" -exec mv {} ../ \;
 
-      # ── 14. IPA 인젝션 ─────────────────────────────────────
+      # ── 13. IPA 인젝션 ─────────────────────────────────────
       - name: Inject tweaks into IPA
         run: |
           tweaks="ytplus.deb"
@@ -378,7 +373,7 @@ jobs:
                -b "${{ github.event.inputs.bundle_id }}"
 
 
-      # ── 15. GitHub Release 업로드 ──────────────────────────
+      # ── 14. GitHub Release 업로드 ──────────────────────────
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
