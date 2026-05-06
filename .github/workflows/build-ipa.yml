@@ -68,8 +68,7 @@ jobs:
           key: theos-${{ runner.os }}-v1
 
       # ── 4. 도구 설치 ──────────────────────────────────────────────
-      # ldid는 libplist에 의존하므로 캐시 여부 상관없이 항상 brew install
-      # (캐시만 복원하면 libplist 의존성이 없어서 ldid 크래시 발생)
+      # ldid는 libplist 의존성 문제로 캐시 여부 무관하게 항상 brew install
       - name: Install Build Tools
         shell: bash
         run: |
@@ -124,11 +123,10 @@ jobs:
             echo "Theos 캐시 히트"
           fi
 
-          # IPA 다운로드 완료 대기
           wait $IPA_PID
           echo "IPA 다운로드 완료: $(ls -lh youtube.ipa | awk '{print $5}')"
 
-          # ── plist에서 유튜브 버전 추출 ──────────────────────────────
+          # plist에서 유튜브 버전 추출
           PLIST_PATH=$(unzip -Z1 youtube.ipa "Payload/*.app/Info.plist" 2>/dev/null | head -1)
           if [[ -n "$PLIST_PATH" ]]; then
             PLIST_TMP=$(mktemp)
@@ -182,35 +180,30 @@ jobs:
           CACHE_UPDATED=false
           HEADER_ONLY="YouTubeHeader PSHeader YouGroupSettings YTVideoOverlay"
 
+          # ── tweaks/ 폴더의 패치된 .deb 파일 복사 ───────────────────
+          # com.dvntm.ytlite_5.2.1_iphoneos-arm_patch_zarzel.deb 같은
+          # 이미 패치 완료된 파일을 주입 대상에 포함
+          # 캐시 파일({NAME}_{SHA8}.deb)은 제외하고 원본만 복사
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "  저장소 내 기존 .deb 복사 (YTLite 등 패치된 파일)"
+          echo "  저장소 내 패치된 .deb 복사"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          # tweaks/ 폴더에 있는 모든 .deb를 주입 대상에 포함
-          # (com.dvntm.ytlite_5.2.1_iphoneos-arm_patch_zarzel.deb 등 패치된 파일)
-          PREBUILT_COUNT=0
           for deb in "$CACHE_DIR"/*.deb; do
             [[ -f "$deb" ]] || continue
-            # SHA 패턴 파일(트윅캐시)은 제외하고, 원본 패치파일만 복사
-            # 캐시 파일은 {NAME}_{SHA40}.deb 패턴 → SHA가 40자인 경우 제외
-            FNAME=$(basename "$deb")
-            SHA_PART="${FNAME%.*}"       # 확장자 제거
-            SHA_PART="${SHA_PART##*_}"   # 마지막 _ 이후
-            if [[ ${#SHA_PART} -eq 40 || ${#SHA_PART} -eq 8 ]]; then
-              # 트윅 캐시 파일 — 뒤에서 별도 처리됨
+            FNAME=$(basename "$deb" .deb)
+            SHA_PART="${FNAME##*_}"
+            # SHA 길이가 8 또는 40이면 캐시 파일 → 건너뜀
+            if [[ ${#SHA_PART} -eq 8 || ${#SHA_PART} -eq 40 ]]; then
               continue
             fi
             cp "$deb" "$READY_DIR/"
-            echo "  ✅ 포함: $FNAME"
-            PREBUILT_COUNT=$((PREBUILT_COUNT + 1))
+            echo "  ✅ $(basename $deb)"
           done
-          echo "  총 ${PREBUILT_COUNT}개 기존 .deb 복사 완료"
 
+          # ── 1단계: SHA 전부 병렬 조회 ───────────────────────────────
           echo ""
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo "  SHA 조회 (병렬)"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
-          # ── 1단계: SHA 전부 병렬 조회 ───────────────────────────────
           SHA_PIDS=()
           for repo in "${REPOS[@]}"; do
             NAME="${repo%%|*}"; rest="${repo#*|}"
@@ -229,11 +222,11 @@ jobs:
           done
           for pid in "${SHA_PIDS[@]}"; do wait "$pid" || true; done
 
+          # ── 2단계: 캐시 확인 + 클론 병렬 예약 ──────────────────────
+          echo ""
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "  캐시 확인 + 클론 예약 (병렬)"
+          echo "  캐시 확인 + 클론 예약"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
-          # ── 2단계: 캐시 확인 → 히트면 복사, 미스면 클론 병렬 예약 ────
           CLONE_PIDS=()
           CLONE_LIST=()
 
@@ -245,7 +238,6 @@ jobs:
             LATEST_SHA=$(cat "$SHA_STORE/${NAME}.sha" 2>/dev/null || echo "unknown")
 
             if echo "$HEADER_ONLY" | grep -qw "$NAME"; then
-              # 헤더: tar로 캐시
               CACHED=$(ls "$CACHE_DIR/${NAME}_${LATEST_SHA}.tar" 2>/dev/null || true)
               if [[ -n "$CACHED" && "$LATEST_SHA" != "unknown" ]]; then
                 echo "  ✅ $NAME — 헤더 캐시 히트 (${LATEST_SHA})"
@@ -258,7 +250,6 @@ jobs:
                 CLONE_LIST+=("$NAME")
               fi
             else
-              # 트윅: deb로 캐시
               CACHED=$(ls "$CACHE_DIR/${NAME}_${LATEST_SHA}.deb" 2>/dev/null || true)
               if [[ -n "$CACHED" && "$LATEST_SHA" != "unknown" ]]; then
                 echo "  ✅ $NAME — 캐시 히트 (${LATEST_SHA})"
@@ -277,7 +268,7 @@ jobs:
             echo ""
             echo "  ⏳ 클론 완료 대기 (${#CLONE_PIDS[@]}개)..."
             for pid in "${CLONE_PIDS[@]}"; do wait "$pid" || true; done
-            echo "  모든 클론 완료"
+            echo "  클론 완료"
           fi
 
           # ── 4단계: 헤더 구조화 ──────────────────────────────────────
@@ -315,7 +306,7 @@ jobs:
             DIR="$BUILD_DIR/$NAME"
             SHA=$(cat "$SHA_STORE/${NAME}.sha" 2>/dev/null || echo "unknown")
 
-            # 헤더 전용: 빌드 없이 tar 캐시 저장
+            # 헤더 전용: tar 캐시 저장 후 건너뜀
             if echo "$HEADER_ONLY" | grep -qw "$NAME"; then
               if [[ -d "$DIR" && "$SHA" != "unknown" ]]; then
                 rm -f "$CACHE_DIR/${NAME}_"*.tar
@@ -356,7 +347,7 @@ jobs:
                   done
                   echo "  ✅ $NAME 빌드 완료"
                 else
-                  echo "  ❌ $NAME 빌드 실패 (로그 하단 20줄):"
+                  echo "  ❌ $NAME 빌드 실패:"
                   tail -20 /tmp/build_${NAME}.log
                 fi
               else
@@ -367,7 +358,6 @@ jobs:
             BUILD_PIDS+=($!)
           done
 
-          # 모든 빌드 완료 대기
           if [[ ${#BUILD_PIDS[@]} -gt 0 ]]; then
             echo "  ⏳ 빌드 완료 대기 (${#BUILD_PIDS[@]}개)..."
             for pid in "${BUILD_PIDS[@]}"; do wait "$pid" || true; done
@@ -382,12 +372,12 @@ jobs:
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           ls -lh "$READY_DIR/" || true
 
-          # ready_packages가 비어있으면 실패
-          DEB_COUNT=$(find "$READY_DIR" -name "*.deb" | wc -l)
+          DEB_COUNT=$(find "$READY_DIR" -name "*.deb" | wc -l | tr -d ' ')
           if [[ "$DEB_COUNT" -eq 0 ]]; then
             echo "❌ 주입할 .deb 파일이 없습니다!"
             exit 1
           fi
+          echo "  총 ${DEB_COUNT}개 준비됨"
 
           echo "CACHE_UPDATED=$CACHE_UPDATED" >> $GITHUB_ENV
 
@@ -404,18 +394,21 @@ jobs:
           git push
 
       # ── 8. 주입 및 릴리스 ─────────────────────────────────────────
+      # 스텁 dylib 주입 없음 — macOS에서 만든 스텁을 iOS IPA에 넣으면
+      # 플랫폼/아키텍처 불일치로 앱 실행 즉시 크래시 발생
+      # com.dvntm.ytlite deb는 이미 패치 완료 상태이므로 추가 처리 불필요
       - name: Inject and Release
         shell: bash
         run: |
           set -e
           CYAN="$CYAN_BIN_DIR/cyan"
           if [[ ! -x "$CYAN" ]]; then
-            echo "❌ cyan을 찾을 수 없습니다: $CYAN"
+            echo "cyan을 찾을 수 없습니다: $CYAN"
             ls -la "$CYAN_BIN_DIR" || true
             exit 1
           fi
 
-          DEBS=$(find "${{ github.workspace }}/ready_packages" -name "*.deb" | tr '\n' ' ')
+          DEBS=$(find "${{ github.workspace }}/ready_packages" -name "*.deb" | sort | tr '\n' ' ')
           echo "주입할 파일:"
           echo "$DEBS" | tr ' ' '\n' | grep -v '^$' | sed 's/^/  /'
 
