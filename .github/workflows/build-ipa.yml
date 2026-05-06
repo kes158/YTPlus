@@ -168,7 +168,7 @@ jobs:
             "Return-YouTube-Dislikes|https://github.com/PoomSmart/Return-YouTube-Dislikes.git|${{ github.event.inputs.enable_ryd }}"
             "YTABConfig|https://github.com/PoomSmart/YTABConfig.git|${{ github.event.inputs.enable_ytabc }}"
             "YTUHD|https://github.com/PoomSmart/YTUHD.git|${{ github.event.inputs.enable_ytuhd }}"
-            "YouLoop|https://github.com/PoomSmart/YouLoop.git|${{ github.event.inputs.enable_youloop }}"
+            "YouLoop|https://github.com/bhackel/YouLoop.git|${{ github.event.inputs.enable_youloop }}"
             "YouSpeed|https://github.com/PoomSmart/YouSpeed.git|${{ github.event.inputs.enable_youspeed }}"
           )
 
