@@ -325,30 +325,40 @@ jobs:
             YCQ_BUNDLE=$(find "$BUILD_DIR/YouChooseQuality/layout" -type d -name "*.bundle" 2>/dev/null | head -1)
             
             if [[ -n "$YCQ_BUNDLE" ]]; then
+              echo "  번들 경로: $YCQ_BUNDLE"
+              echo "  번들 내부 구조:"
+              find "$YCQ_BUNDLE" -type f | sed 's/^/    /'
+
               mkdir -p "$YCQ_BUNDLE/ko.lproj"
-              {
-                printf '"TWEAK_NAME" = "YouChooseQuality";\n'
-                printf '"TWEAK_DESC" = "각 상황별로 지정한 화질과 동일하거나 가장 가까운 화질을 자동으로 선택합니다.";\n'
-                printf '"ENABLED" = "활성화";\n'
-                printf '"QUALITY_FOR_SCENARIO_0_SHORT" = "Wi-Fi";\n'
-                printf '"QUALITY_FOR_SCENARIO_0" = "Wi-Fi 연결 시 기본 화질";\n'
-                printf '"QUALITY_FOR_SCENARIO_1_SHORT" = "셀룰러";\n'
-                printf '"QUALITY_FOR_SCENARIO_1" = "셀룰러(모바일 데이터) 연결 시 기본 화질";\n'
-                printf '"QUALITY_FOR_SCENARIO_2_SHORT" = "Wi-Fi (AirPlay)";\n'
-                printf '"QUALITY_FOR_SCENARIO_2" = "AirPlay 사용 중 Wi-Fi 연결 시 기본 화질";\n'
-                printf '"QUALITY_FOR_SCENARIO_3_SHORT" = "셀룰러 (AirPlay)";\n'
-                printf '"QUALITY_FOR_SCENARIO_3" = "AirPlay 사용 중 셀룰러 연결 시 기본 화질";\n'
-                printf '"QUALITY_FOR_SCENARIO_4_SHORT" = "저전력 모드";\n'
-                printf '"QUALITY_FOR_SCENARIO_4" = "저전력 모드 활성화 시 기본 화질";\n'
-              } > "$YCQ_BUNDLE/ko.lproj/Localizable.strings"
-              echo "  ✅ 한국어 로컬라이제이션 파일 생성 완료"
-              echo "  📁 위치: $YCQ_BUNDLE/ko.lproj/Localizable.strings"
-              echo "  🎯 이 상태로 빌드되어 캐시에 저장됩니다!"
+
+              # Root.strings + Localizable.strings 두 파일 모두 생성
+              # (PreferenceLoader UI용 Root.strings, 트윅 내부용 Localizable.strings)
+              for _FNAME in Root.strings Localizable.strings; do
+                _DEST="$YCQ_BUNDLE/ko.lproj/$_FNAME"
+                printf '"TWEAK_NAME" = "YouChooseQuality";\n'           > "$_DEST"
+                printf '"TWEAK_DESC" = "각 상황별로 지정한 화질과 동일하거나 가장 가까운 화질을 자동으로 선택합니다.";\n' >> "$_DEST"
+                printf '"ENABLED" = "활성화";\n'                        >> "$_DEST"
+                printf '"QUALITY_FOR_SCENARIO_0_SHORT" = "Wi-Fi";\n'    >> "$_DEST"
+                printf '"QUALITY_FOR_SCENARIO_0" = "Wi-Fi 연결 시 기본 화질";\n'            >> "$_DEST"
+                printf '"QUALITY_FOR_SCENARIO_1_SHORT" = "셀룰러";\n'   >> "$_DEST"
+                printf '"QUALITY_FOR_SCENARIO_1" = "셀룰러(모바일 데이터) 연결 시 기본 화질";\n' >> "$_DEST"
+                printf '"QUALITY_FOR_SCENARIO_2_SHORT" = "Wi-Fi (AirPlay)";\n'              >> "$_DEST"
+                printf '"QUALITY_FOR_SCENARIO_2" = "AirPlay 사용 중 Wi-Fi 연결 시 기본 화질";\n' >> "$_DEST"
+                printf '"QUALITY_FOR_SCENARIO_3_SHORT" = "셀룰러 (AirPlay)";\n'             >> "$_DEST"
+                printf '"QUALITY_FOR_SCENARIO_3" = "AirPlay 사용 중 셀룰러 연결 시 기본 화질";\n' >> "$_DEST"
+                printf '"QUALITY_FOR_SCENARIO_4_SHORT" = "저전력 모드";\n'                  >> "$_DEST"
+                printf '"QUALITY_FOR_SCENARIO_4" = "저전력 모드 활성화 시 기본 화질";\n'   >> "$_DEST"
+                echo "  ko.lproj/$_FNAME 생성 완료"
+              done
+
+              # 기존 strings 파일 확인 (디버그)
+              find "$YCQ_BUNDLE" -name "*.strings" | grep -v "ko.lproj" | head -3 | while IFS= read -r _F; do
+                echo "  기존: $_F"
+                head -5 "$_F" | sed 's/^/    /'
+              done
             else
-              echo "  ⚠️  YouChooseQuality bundle을 찾을 수 없습니다"
-              echo "  (빌드는 계속 진행됩니다)"
+              echo "  YouChooseQuality bundle을 찾을 수 없습니다"
             fi
-          fi
 
           # ── 6단계: 병렬 빌드 ────────────────────────────────────────
           echo ""
