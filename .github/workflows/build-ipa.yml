@@ -428,16 +428,26 @@ jobs:
             exit 1
           fi
 
+          # YTLite 본체 deb (tweaks/ 폴더에 저장된 pre-built)
+          YTLITE_DEB=$(ls ${{ github.workspace }}/tweaks/com.dvntm.ytlite_*.deb 2>/dev/null | head -1)
+          if [[ -z "$YTLITE_DEB" ]]; then
+            echo "❌ YTLite deb를 찾을 수 없습니다 (tweaks/ 폴더 확인)"
+            exit 1
+          fi
+          echo "✅ YTLite deb: $(basename $YTLITE_DEB)"
+
+          # 보조 트윅 deb들 (ready_packages/)
           DEBS=$(ls ${{ github.workspace }}/ready_packages/*.deb 2>/dev/null | tr '\n' ' ')
           if [[ -z "$DEBS" ]]; then
-            echo "주입할 .deb 파일이 없습니다!"
+            echo "주입할 보조 트윅 .deb 파일이 없습니다!"
             exit 1
           fi
 
+          # YTLite 본체를 첫 번째로, 보조 트윅들을 그 뒤에 주입
           "$CYAN" \
             -i ./youtube.ipa \
             -o "${{ steps.meta.outputs.ipa_name }}" \
-            -f $DEBS \
+            -f "$YTLITE_DEB" $DEBS \
             -n "${{ github.event.inputs.app_name }}" \
             -b "${{ github.event.inputs.bundle_id }}"
 
