@@ -423,50 +423,24 @@ jobs:
         run: |
           CYAN="$CYAN_BIN_DIR/cyan"
           if [[ ! -x "$CYAN" ]]; then
-            echo "❌ cyan을 찾을 수 없습니다: $CYAN"
+            echo "cyan을 찾을 수 없습니다: $CYAN"
+            ls -la "$CYAN_BIN_DIR" || true
             exit 1
           fi
 
-          # 1. YTPlus 본체 deb 설정
-          YTPLUS_DEB=$(ls ${{ github.workspace }}/tweaks/com.dvntm.ytlite_5.2.1_iphoneos-arm_patch_zarzel.deb 2>/dev/null | head -1)
-          if [[ -z "$YTPLUS_DEB" ]]; then
-            echo "❌ YTPlus 본체 deb를 찾을 수 없습니다!"
+          DEBS=$(ls ${{ github.workspace }}/ready_packages/*.deb 2>/dev/null | tr '\n' ' ')
+          if [[ -z "$DEBS" ]]; then
+            echo "주입할 .deb 파일이 없습니다!"
             exit 1
           fi
-          echo "📦 YTPlus 본체: $YTPLUS_DEB"
 
-          # 2. 보조 트윅들 중복 제거 로직
-          RAW_DEBS=$(ls ${{ github.workspace }}/ready_packages/*.deb 2>/dev/null)
-          UNIQUE_DEBS=""
-          SEEN_TWEAKS=""
-
-          for deb in $RAW_DEBS; do
-            filename=$(basename "$deb")
-            
-            # 본체(ytlite) 중복 제외
-            if [[ "$filename" == *"ytlite"* ]]; then continue; fi
-            
-            # 트윅 ID 추출[cite: 4]
-            tweak_id=$(echo "$filename" | cut -d'_' -f1)
-            
-            if [[ "$SEEN_TWEAKS" != *"$tweak_id"* ]]; then
-              UNIQUE_DEBS+="$deb "
-              SEEN_TWEAKS+="$tweak_id "
-              echo "✅ 주입 목록 추가: $filename"
-            else
-              echo "⚠️  중복 제외: $filename"[cite: 4]
-            fi
-          done
-
-          # 3. Cyan 실행 (오류 원인인 -p 옵션 제거)[cite: 4]
           "$CYAN" \
             -i ./youtube.ipa \
             -o "${{ steps.meta.outputs.ipa_name }}" \
-            -f "$YTPLUS_DEB" $UNIQUE_DEBS \
+            -f $DEBS \
             -n "${{ github.event.inputs.app_name }}" \
             -b "${{ github.event.inputs.bundle_id }}"
 
-      # ── 9. 릴리스 업로드 (기존 코드 유지) ──
       - name: Upload to Release
         uses: softprops/action-gh-release@v2
         with:
