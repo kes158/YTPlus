@@ -48,7 +48,27 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
-      # ── 2. cyan 캐시 ──────────────────────────────────────────────
+      # ── 2. Homebrew 패키지 캐시 ───────────────────────────────────
+      # make, ldid, dpkg + 의존성(libplist, gpatch, libmd) 전부 캐시
+      # ldid manifest fetch만 47s 걸림 → 캐시 히트 시 68s → ~2s 절감
+      - name: Cache Homebrew packages
+        id: brew-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            /opt/homebrew/Cellar/make
+            /opt/homebrew/Cellar/ldid
+            /opt/homebrew/Cellar/libplist
+            /opt/homebrew/Cellar/dpkg
+            /opt/homebrew/Cellar/gpatch
+            /opt/homebrew/Cellar/libmd
+            /opt/homebrew/bin/gmake
+            /opt/homebrew/bin/ldid
+            /opt/homebrew/bin/dpkg
+            /opt/homebrew/bin/dpkg-deb
+          key: brew-make-ldid-dpkg-${{ runner.os }}-v1
+
+      # ── 3. cyan 캐시 ──────────────────────────────────────────────
       - name: Cache cyan (pyzule-rw)
         id: cyan-cache
         uses: actions/cache@v4
@@ -59,7 +79,7 @@ jobs:
             /Users/runner/.local/bin/cgen
           key: cyan-pyzule-rw-${{ runner.os }}-v2
 
-      # ── 3. Theos 캐시 ─────────────────────────────────────────────
+      # ── 4. Theos 캐시 ─────────────────────────────────────────────
       - name: Cache Theos
         id: theos-cache
         uses: actions/cache@v4
@@ -67,12 +87,18 @@ jobs:
           path: ${{ github.workspace }}/theos
           key: theos-${{ runner.os }}-v1
 
-      # ── 4. 도구 설치 ──────────────────────────────────────────────
-      # ldid는 libplist 의존성 문제로 캐시 여부 무관하게 항상 brew install
+      # ── 5. 도구 설치 ──────────────────────────────────────────────
+      # brew 캐시 히트 시: link만 (~2s) / 미스 시: 전체 설치 (~68s)
       - name: Install Build Tools
         shell: bash
         run: |
-          brew install make ldid dpkg aria2
+          if [[ "${{ steps.brew-cache.outputs.cache-hit }}" == "true" ]]; then
+            echo "Homebrew 캐시 히트 — brew link"
+            brew link --overwrite make ldid dpkg 2>/dev/null || true
+          else
+            echo "Homebrew 캐시 미스 — brew install"
+            brew install make ldid dpkg
+          fi
           echo "$(brew --prefix make)/libexec/gnubin" >> $GITHUB_PATH
 
           if [[ "${{ steps.cyan-cache.outputs.cache-hit }}" != "true" ]]; then
@@ -95,7 +121,7 @@ jobs:
           fi
           echo "cyan 확인: $(which cyan)"
 
-      # ── 5. IPA 다운로드 + Theos 설치 (병렬) ──────────────────────
+      # ── 6. IPA 다운로드 + Theos 설치 (병렬) ──────────────────────
       - name: Setup Theos and Download IPA
         id: meta
         shell: bash
@@ -148,7 +174,7 @@ jobs:
           echo "release_name=YTPlus_5.2.1_${YT_VERSION}"  >> "$GITHUB_OUTPUT"
           echo "tag=YTPlus_5.2.1_${YT_VERSION}"           >> "$GITHUB_OUTPUT"
 
-      # ── 6. 트윅 캐시 확인 및 선택적 클론/빌드 ───────────────────────
+      # ── 7. 트윅 캐시 확인 및 선택적 클론/빌드 ───────────────────────
       - name: Check Cache and Build Tweaks Selectively
         shell: bash
         env:
@@ -181,9 +207,6 @@ jobs:
           HEADER_ONLY="YouTubeHeader PSHeader"
 
           # ── tweaks/ 폴더의 패치된 .deb 파일 복사 ───────────────────
-          # com.dvntm.ytlite_5.2.1_iphoneos-arm_patch_zarzel.deb 같은
-          # 이미 패치 완료된 파일을 주입 대상에 포함
-          # 캐시 파일({NAME}_{SHA8}.deb)은 제외하고 원본만 복사
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo "  저장소 내 패치된 .deb 복사"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -339,9 +362,9 @@ jobs:
                 rm -f "$CACHE_DIR/${NAME}_"*.tar
                 tar -cf "$CACHE_DIR/${NAME}_${SHA}.tar" -C "$DIR" --exclude='.git' .
                 touch "$SHA_STORE/CACHE_UPDATED"
-                echo "  💾 헤더 캐시 저장: ${NAME}_${SHA}.tar"
+                echo "  헤더 캐시 저장: ${NAME}_${SHA}.tar"
               fi
-              echo "  📎 $NAME — 헤더 전용, 빌드 건너뜀"
+              echo "  $NAME — 헤더 전용, 빌드 건너뜀"
               continue
             fi
 
@@ -370,7 +393,7 @@ jobs:
                     rm -f "$CACHE_DIR/${NAME}_"*.deb
                     cp "$deb" "$CACHE_DIR/${NAME}_${SHA}.deb"
                     touch "$SHA_STORE/CACHE_UPDATED"
-                    echo "  💾 캐시 저장: ${NAME}_${SHA}.deb"
+                    echo "  캐시 저장: ${NAME}_${SHA}.deb"
                   done
                   echo "  ✅ $NAME 빌드 완료"
                 else
@@ -408,7 +431,7 @@ jobs:
 
           echo "CACHE_UPDATED=$CACHE_UPDATED" >> $GITHUB_ENV
 
-      # ── 7. 새 캐시 push ───────────────────────────────────────────
+      # ── 8. 새 캐시 push ───────────────────────────────────────────
       - name: Commit Updated Tweak Cache
         if: env.CACHE_UPDATED == 'true'
         shell: bash
@@ -420,10 +443,7 @@ jobs:
           git commit -m "chore: 트윅 캐시 업데이트 [skip ci]"
           git push
 
-      # ── 8. 주입 및 릴리스 ─────────────────────────────────────────
-      # 스텁 dylib 주입 없음 — macOS에서 만든 스텁을 iOS IPA에 넣으면
-      # 플랫폼/아키텍처 불일치로 앱 실행 즉시 크래시 발생
-      # com.dvntm.ytlite deb는 이미 패치 완료 상태이므로 추가 처리 불필요
+      # ── 9. 주입 및 릴리스 ─────────────────────────────────────────
       - name: Inject and Release
         shell: bash
         run: |
