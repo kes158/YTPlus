@@ -118,7 +118,6 @@ jobs:
           key: theos-${{ runner.os }}-v1
 
       # ── 5. Theos 설치 + SDK 다운로드 + IPA 다운로드 (병렬) ──────────
-      #   IPA 다운 완료 후 plist에서 YT 버전을 읽어 메타데이터 출력
       - name: Setup Theos and Download IPA
         id: meta
         shell: bash
@@ -153,7 +152,6 @@ jobs:
           echo "IPA 다운로드 완료: $(ls -lh youtube.ipa | awk '{print $5}')"
 
           # ── plist에서 YouTube 버전 추출 ─────────────────────────────
-          # unzip -p로 Info.plist만 스트림 추출 → 전체 압축 해제 불필요, 7s→~0s
           PLIST_PATH=$(unzip -Z1 youtube.ipa "Payload/*.app/Info.plist" 2>/dev/null | head -1)
           if [[ -n "$PLIST_PATH" ]]; then
             PLIST_TMP=$(mktemp)
@@ -403,8 +401,6 @@ jobs:
           git push
 
       # ── 8. 인젝션 및 릴리스 ────────────────────────────────────────
-      # ✅ BUG FIX #1: ls 명령을 find로 교체 (pipefail 방지)
-      # ✅ BUG FIX #2: CydiaSubstrate 절대경로 필터링 추가
       - name: Inject and Release
         shell: bash
         run: |
@@ -419,95 +415,91 @@ jobs:
 
           # ── 환경 변수 설정
           STUB_DIR="${{ github.workspace }}/stubs"
-          YTLITE_EXTRACT="${YTLITE_EXTRACT:-/var/folders/tb/y368xp_x10s3ty1b_mtl5mxr0000gn/T/tmp.Ss1G8BqUjz}"
           READY_DIR="${{ github.workspace }}/ready_packages"
 
           mkdir -p "$STUB_DIR" "$READY_DIR"
 
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "  누락 스텁 생성"
+          echo "  의존성 분석 및 스텁 생성"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-          # ── YTLite.dylib / YTLite.bundle 위치 (이전 step에서 추출 완료)
-          YTLITE_DYLIB=$(find "$YTLITE_EXTRACT" -name "YTLite.dylib" | head -1)
-          YTLITE_BUNDLE=$(find "$YTLITE_EXTRACT" -name "YTLite.bundle" -type d | head -1)
+          # ✅ YTLite.deb 동적 검색 및 추출[cite: 6]
+          YTLITE_DEB=$(find "$READY_DIR" -name "*ytlite*.deb" 2>/dev/null | head -1)
 
-          echo "✅ YTLite.dylib: $YTLITE_DYLIB"
-          echo "✅ YTLite.bundle: $YTLITE_BUNDLE"
-
-          if [[ -z "$YTLITE_DYLIB" ]]; then
-            echo "❌ YTLite.dylib를 찾을 수 없습니다"
-            exit 1
+          if [[ -n "$YTLITE_DEB" ]]; then
+            echo "✅ YTLite.deb 찾음: $YTLITE_DEB"
+            YTLITE_EXTRACT=$(mktemp -d)
+            dpkg -x "$YTLITE_DEB" "$YTLITE_EXTRACT"
+            
+            YTLITE_DYLIB=$(find "$YTLITE_EXTRACT" -name "YTLite.dylib" | head -1)
+            YTLITE_BUNDLE=$(find "$YTLITE_EXTRACT" -name "YTLite.bundle" -type d | head -1)
+            
+            echo "✅ YTLite.dylib: $YTLITE_DYLIB"
+            echo "✅ YTLite.bundle: $YTLITE_BUNDLE"
+          else
+            echo "⚠️  YTLite.deb를 찾을 수 없습니다. 스텁 생성 건너뜀"
+            YTLITE_DYLIB=""
           fi
 
-          # ── 공백 경로 문제 방지: bundle을 안전한 경로로 복사
-          YTLITE_BUNDLE_SAFE=""
-          if [[ -n "$YTLITE_BUNDLE" ]]; then
-            YTLITE_BUNDLE_SAFE="$(mktemp -d)/YTLite.bundle"
-            cp -R "$YTLITE_BUNDLE" "$YTLITE_BUNDLE_SAFE"
-            echo "✅ YTLite.bundle (safe path): $YTLITE_BUNDLE_SAFE"
-          fi
-
-          # ── 의존성 분석: @rpath 와 CydiaSubstrate 절대경로 모두 필터링
-          echo ""
-          echo "📦 YTLite.dylib 의존성 분석..."
-          otool -L "$YTLITE_DYLIB" | head -15
-
-          echo ""
-          echo "🔍 누락된 의존성 필터링..."
-
-          # BUG FIX #2: CydiaSubstrate 절대경로를 포함한 필터 정규식
-          MISSING_DEPS=$(otool -L "$YTLITE_DYLIB" | \
-            grep -E "(@rpath/|/Library/Frameworks/CydiaSubstrate)" | \
-            awk '{print $1}' | \
-            sort -u || true)
-
-          if [[ -n "$MISSING_DEPS" ]]; then
-            echo "  감지된 누락 의존성:"
-            echo "$MISSING_DEPS" | sed 's/^/    /'
+          if [[ -n "$YTLITE_DYLIB" ]]; then
+            # ── 의존성 분석: @rpath 와 CydiaSubstrate 절대경로 모두 필터링
             echo ""
+            echo "📦 YTLite.dylib 의존성 분석..."
+            otool -L "$YTLITE_DYLIB" | head -15 || true
 
-            # ── 각 누락된 의존성마다 스텁 생성
-            while IFS= read -r DEP; do
-              [[ -z "$DEP" ]] && continue
+            echo ""
+            echo "🔍 누락된 의존성 필터링..."
 
-              # @rpath 의존성 처리
-              if [[ "$DEP" == "@rpath/"* ]]; then
-                DEP_NAME=$(basename "$DEP")
-                STUB_FILE="$STUB_DIR/$DEP_NAME"
+            MISSING_DEPS=$(otool -L "$YTLITE_DYLIB" | \
+              grep -E "(@rpath/|/Library/Frameworks/CydiaSubstrate)" | \
+              awk '{print $1}' | \
+              sort -u || true)
 
-                echo "  🏗  스텁 생성: $DEP_NAME"
-                # 최소 dylib 스텁 생성
-                if echo 'extern int __dso_handle;' | gcc -c -o "$STUB_FILE.o" -x c - 2>/dev/null; then
-                  ld -dylib -o "$STUB_FILE" "$STUB_FILE.o" -lSystem 2>/dev/null || \
-                    echo "    ⚠️  스텁 컴파일 실패 (경고, 계속)"
-                  rm -f "$STUB_FILE.o"
-                else
-                  echo "    ⚠️  스텁 생성 실패"
-                fi
+            if [[ -n "$MISSING_DEPS" ]]; then
+              echo "  감지된 누락 의존성:"
+              echo "$MISSING_DEPS" | sed 's/^/    /'
+              echo ""
 
-              # CydiaSubstrate 절대경로 처리
-              elif [[ "$DEP" == *"CydiaSubstrate"* ]]; then
-                STUB_FILE="$STUB_DIR/CydiaSubstrate.dylib"
-                if [[ ! -f "$STUB_FILE" ]]; then
-                  echo "  🏗  스텁 생성: CydiaSubstrate.dylib"
+              # ── 각 누락된 의존성마다 스텁 생성
+              while IFS= read -r DEP; do
+                [[ -z "$DEP" ]] && continue
+
+                # @rpath 의존성 처리
+                if [[ "$DEP" == "@rpath/"* ]]; then
+                  DEP_NAME=$(basename "$DEP")
+                  STUB_FILE="$STUB_DIR/$DEP_NAME"
+
+                  echo "  🏗  스텁 생성: $DEP_NAME"
                   if echo 'extern int __dso_handle;' | gcc -c -o "$STUB_FILE.o" -x c - 2>/dev/null; then
                     ld -dylib -o "$STUB_FILE" "$STUB_FILE.o" -lSystem 2>/dev/null || \
                       echo "    ⚠️  스텁 컴파일 실패 (경고, 계속)"
                     rm -f "$STUB_FILE.o"
+                  else
+                    echo "    ⚠️  스텁 생성 실패"
+                  fi
+
+                # CydiaSubstrate 절대경로 처리
+                elif [[ "$DEP" == *"CydiaSubstrate"* ]]; then
+                  STUB_FILE="$STUB_DIR/CydiaSubstrate.dylib"
+                  if [[ ! -f "$STUB_FILE" ]]; then
+                    echo "  🏗  스텁 생성: CydiaSubstrate.dylib"
+                    if echo 'extern int __dso_handle;' | gcc -c -o "$STUB_FILE.o" -x c - 2>/dev/null; then
+                      ld -dylib -o "$STUB_FILE" "$STUB_FILE.o" -lSystem 2>/dev/null || \
+                        echo "    ⚠️  스텁 컴파일 실패 (경고, 계속)"
+                      rm -f "$STUB_FILE.o"
+                    fi
                   fi
                 fi
-              fi
-            done <<< "$MISSING_DEPS"
-          else
-            echo "  ✅ 모든 의존성 해결됨"
+              done <<< "$MISSING_DEPS"
+            else
+              echo "  ✅ 모든 의존성 해결됨"
+            fi
           fi
 
           echo ""
           echo "생성된 스텁 목록:"
           ls -la "$STUB_DIR"/*.dylib 2>/dev/null || echo "  (없음)"
 
-          # BUG FIX #1: ls 대신 find 사용 (pipefail 안전성)
           STUBS=$(find "$STUB_DIR" -maxdepth 1 -name "*.dylib" -type f 2>/dev/null | tr '\n' ' ')
 
           if [[ -n "$STUBS" ]]; then
@@ -533,12 +525,22 @@ jobs:
           echo "  Cyan 주입 실행"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-          "$CYAN" \
-            -i ./youtube.ipa \
-            -o "${{ steps.meta.outputs.ipa_name }}" \
-            -f $STUBS "$YTLITE_DYLIB" "$YTLITE_BUNDLE_SAFE" $DEBS \
-            -n "${{ github.event.inputs.app_name }}" \
-            -b "${{ github.event.inputs.bundle_id }}"
+          # ✅ cyan 실행 시 개별 파일 제외하고 deb 전체 주입[cite: 6]
+          if [[ -n "$STUBS" ]]; then
+            "$CYAN" \
+              -i ./youtube.ipa \
+              -o "${{ steps.meta.outputs.ipa_name }}" \
+              -f $STUBS $DEBS \
+              -n "${{ github.event.inputs.app_name }}" \
+              -b "${{ github.event.inputs.bundle_id }}"
+          else
+            "$CYAN" \
+              -i ./youtube.ipa \
+              -o "${{ steps.meta.outputs.ipa_name }}" \
+              -f $DEBS \
+              -n "${{ github.event.inputs.app_name }}" \
+              -b "${{ github.event.inputs.bundle_id }}"
+          fi
 
           echo ""
           echo "✅ IPA 빌드 완료: ${{ steps.meta.outputs.ipa_name }}"
