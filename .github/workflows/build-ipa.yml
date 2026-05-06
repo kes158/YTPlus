@@ -459,6 +459,15 @@ jobs:
             exit 1
           fi
 
+          # "Application Support" 경로에 공백이 있어서 shell이 인자를 쪼갬
+          # → 공백 없는 임시 경로로 복사해서 전달
+          YTLITE_BUNDLE_SAFE=""
+          if [[ -n "$YTLITE_BUNDLE" ]]; then
+            YTLITE_BUNDLE_SAFE="$(mktemp -d)/YTLite.bundle"
+            cp -R "$YTLITE_BUNDLE" "$YTLITE_BUNDLE_SAFE"
+            echo "✅ YTLite.bundle (safe): $YTLITE_BUNDLE_SAFE"
+          fi
+
           # 보조 트윅 deb들
           DEBS=$(ls ${{ github.workspace }}/ready_packages/*.deb 2>/dev/null | tr '\n' ' ')
           if [[ -z "$DEBS" ]]; then
@@ -467,13 +476,10 @@ jobs:
           fi
 
           # YTLite.dylib + YTLite.bundle + 보조 트윅 순서로 주입
-          BUNDLE_ARG=""
-          [[ -n "$YTLITE_BUNDLE" ]] && BUNDLE_ARG=""$YTLITE_BUNDLE""
-
           "$CYAN" \
             -i ./youtube.ipa \
             -o "${{ steps.meta.outputs.ipa_name }}" \
-            -f "$YTLITE_DYLIB" $BUNDLE_ARG $DEBS \
+            -f "$YTLITE_DYLIB" "$YTLITE_BUNDLE_SAFE" $DEBS \
             -n "${{ github.event.inputs.app_name }}" \
             -b "${{ github.event.inputs.bundle_id }}"
 
