@@ -1,149 +1,147 @@
-# YouTube Plus (ex. YTLite)
-A flexible enhancer for YouTube on iOS, featuring over hundred customizable options.
+# YouTube Plus (구 YTLite)
+iOS용 YouTube 강화 트윅으로, 100가지 이상의 커스터마이징 옵션을 제공합니다.
 
-## Table of Contents
-- [Screenshots](#screenshots)
-- [Main Features](#main-features)
-- [FAQ](#faq)
-- [Reviews](#reviews)
-- [How to build a YouTube Plus app using GitHub Actions](#how-to-build-a-youtube-plus-app-using-github-actions)
-- [Supported YouTube Version](#supported-youtube-version)
-- [Tweak Integration Details](#tweak-integration-details)
+## 목차
+- [스크린샷](#스크린샷)
+- [주요 기능](#주요-기능)
+- [자주 묻는 질문](#자주-묻는-질문)
+- [리뷰](#리뷰)
+- [GitHub Actions로 YouTube Plus 앱 빌드하기](#github-actions로-youtube-plus-앱-빌드하기)
+- [지원 YouTube 버전](#지원-youtube-버전)
+- [통합 트윅 상세 정보](#통합-트윅-상세-정보)
 
-## Screenshots
+## 스크린샷
 <table>
    <tr>
-      <td><img src="Resources/scr1.jpg" alt="Screenshot 1" /></td>
-      <td><img src="Resources/scr2.jpg" alt="Screenshot 2" /></td>
-      <td><img src="Resources/scr3.jpg" alt="Screenshot 3" /></td>
+      <td><img src="Resources/scr1.jpg" alt="스크린샷 1" /></td>
+      <td><img src="Resources/scr2.jpg" alt="스크린샷 2" /></td>
+      <td><img src="Resources/scr3.jpg" alt="스크린샷 3" /></td>
    </tr>
 </table>
 
 <details>
-  <summary>More screenshots</summary>
+  <summary>더 보기</summary>
   <table>
     <tr>
-      <td><img src="Resources/scr4.jpg" alt="Screenshot 4" /></td>
-      <td><img src="Resources/scr5.jpg" alt="Screenshot 5" /></td>
-      <td><img src="Resources/scr6.jpg" alt="Screenshot 6" /></td>
+      <td><img src="Resources/scr4.jpg" alt="스크린샷 4" /></td>
+      <td><img src="Resources/scr5.jpg" alt="스크린샷 5" /></td>
+      <td><img src="Resources/scr6.jpg" alt="스크린샷 6" /></td>
     </tr>
     <tr>
-      <td><img src="Resources/scr7.jpg" alt="Screenshot 7" /></td>
-      <td><img src="Resources/scr8.jpg" alt="Screenshot 8" /></td>
-      <td><img src="Resources/scr9.jpg" alt="Screenshot 9" /></td>
+      <td><img src="Resources/scr7.jpg" alt="스크린샷 7" /></td>
+      <td><img src="Resources/scr8.jpg" alt="스크린샷 8" /></td>
+      <td><img src="Resources/scr9.jpg" alt="스크린샷 9" /></td>
     </tr>
   </table>
 </details>
 
-## Main Features
-<li>Download videos, audio (including audio track selection), thumbnails, posts, and profile pictures</li>
-<li>Copy video, comment, and post information</li>
-<li>Interface customization: Remove feed elements, reorder tabs, enable OLED mode, and as use Shorts-only mode</li>
-<li>Player settings: Gestures, default quality, preferred audio track</li>
-<li>Save, Load and Restore settings. Clear cache once or automatically on app startup</li>
-<li>Built-in SponsorBlock</li>
-<li>And much, much more</li>
+## 주요 기능
+<li>동영상, 오디오(트랙 선택 포함), 썸네일, 게시물, 프로필 사진 다운로드</li>
+<li>동영상, 댓글, 게시물 정보 복사</li>
+<li>UI 커스터마이징: 피드 요소 제거, 탭 순서 변경, OLED 모드, Shorts 전용 모드</li>
+<li>플레이어 설정: 제스처, 기본 화질, 기본 오디오 트랙</li>
+<li>설정 저장·불러오기·초기화, 캐시 수동/자동 삭제</li>
+<li>SponsorBlock 내장</li>
+<li>그 외 훨씬 더 많은 기능들</li>
 <br>
 
+**YouTube Plus 설정은 YouTube 앱 설정 안에 있어요**
 
-**YouTube Plus preferences can be found in the YouTube Settings**
-
-**All contributors are listed in the Contributors section**
-**Used open-source libraries are listed in the Open Source Libraries section**
+**기여자 목록은 Contributors 섹션에서 확인할 수 있어요**
+**사용된 오픈소스 라이브러리는 Open Source Libraries 섹션에서 확인할 수 있어요**
 
 > [!NOTE]
-> Starting from version 5.2, YTPlus requires a subscription.  
-> The last free version is [5.2b4](https://github.com/dayanch96/YTLite/releases/tag/v5.2b4).
+> 버전 5.2부터 YTPlus는 구독이 필요해요.  
+> 마지막 무료 버전은 [5.2b4](https://github.com/dayanch96/YTLite/releases/tag/v5.2b4)예요.
 
-## FAQ
-- [🇺🇸 English FAQ](FAQs/FAQ_EN.md)
-- [🇷🇺 ЧаВо на Русском](FAQs/FAQ_RU.md)
-- [🇮🇹 FAQ in Italiano](FAQs/FAQ_IT.md)
-- [🇵🇱 FAQ po polsku](FAQs/FAQ_PL.md)
+## 자주 묻는 질문
+- [🇺🇸 영어 FAQ](FAQs/FAQ_EN.md)
+- [🇷🇺 러시아어 FAQ](FAQs/FAQ_RU.md)
+- [🇮🇹 이탈리아어 FAQ](FAQs/FAQ_IT.md)
+- [🇵🇱 폴란드어 FAQ](FAQs/FAQ_PL.md)
 
-## Reviews
-Review by [@qbap](https://github.com/qbap) on ONE Jailbreak: https://onejailbreak.com/blog/youtube-plus/
+## 리뷰
+[@qbap](https://github.com/qbap)의 ONE Jailbreak 리뷰: https://onejailbreak.com/blog/youtube-plus/
 
-## How to build a YouTube Plus app using Github actions
+## GitHub Actions로 YouTube Plus 앱 빌드하기
 > [!NOTE]
-> If this your first time, complete following steps before starting:
+> 처음 시작하는 경우, 아래 단계를 먼저 완료해주세요:
 >
-> 1. Fork this repository using the fork button on the top right
-> 2. On your forked repository, go to **Repository Settings** > **Actions**, enable **Read and Write** permissions.
+> 1. 오른쪽 상단의 Fork 버튼으로 이 저장소를 포크하세요
+> 2. 포크한 저장소에서 **Repository Settings** > **Actions** 로 이동해서 **Read and Write** 권한을 활성화하세요
 
 <details>
-  <summary>How to build the YouTube Plus app</summary>
+  <summary>YouTube Plus 앱 빌드 방법</summary>
   <ol>
-    <li>Click on <strong>Sync fork</strong>, and if your branch is out-of-date, click on <strong>Update branch</strong>.</li>
-    <li>Navigate to the <strong>Actions tab</strong> in your forked repository and select <strong>Create YouTube Plus app</strong>.</li>
-    <li>Click the <strong>Run workflow</strong> button located on the right side.</li>
-    <li>Mark or unmark the tweaks you want to integrate. Learn more about them in the <a href="#tweak-integration-details">Tweak Integration Details</a> section.</li>
-    <li>Prepare a decrypted .ipa file <em>(we cannot provide this due to legal reasons)</em>, then upload it to a file provider (e.g., filebin.net, filemail.com, or Dropbox is recommended). Paste the URL of the decrypted IPA file in the provided field.</li>
-    <li><strong>NOTE:</strong> Make sure to provide a direct download link to the file, not a link to a webpage. Otherwise, the process will fail.</li>
-    <li>Enter the tweak version from the releases (the latest release is selected by default). You can also change the BundleID and Display Name if desired.</li>
-    <li>Make sure all inputs are correct, then click <strong>Run workflow</strong> to start the process.</li>
-    <li>Wait for the build to finish. You can download the YouTube Plus app from the releases section of your forked repo. (If you can't find the releases section, go to your forked repo and add /releases to the URL, i.e., github.com/user/YTLite/releases.)</li>
+    <li><strong>Sync fork</strong>를 클릭하고, 브랜치가 오래됐다면 <strong>Update branch</strong>를 눌러 최신화하세요.</li>
+    <li>포크한 저장소의 <strong>Actions 탭</strong>으로 이동해서 <strong>Create YouTube Plus app</strong>을 선택하세요.</li>
+    <li>오른쪽의 <strong>Run workflow</strong> 버튼을 클릭하세요.</li>
+    <li>원하는 트윅을 체크/해제하세요. 자세한 내용은 <a href="#통합-트윅-상세-정보">통합 트윅 상세 정보</a> 섹션을 참고하세요.</li>
+    <li>복호화된 .ipa 파일을 준비한 뒤 파일 공유 서비스(filebin.net, filemail.com, Dropbox 등)에 업로드하고, 직접 다운로드 링크를 입력란에 붙여넣으세요.</li>
+    <li><strong>주의:</strong> 웹페이지 링크가 아니라 파일 직접 다운로드 링크여야 해요. 아니면 빌드가 실패해요.</li>
+    <li>릴리즈에서 트윅 버전을 입력하세요 (기본값은 최신 릴리즈). BundleID와 표시 이름도 원하면 바꿀 수 있어요.</li>
+    <li>입력값을 확인한 후 <strong>Run workflow</strong>를 눌러 빌드를 시작하세요.</li>
+    <li>빌드가 끝나면 포크한 저장소의 Releases 섹션에서 앱을 다운로드할 수 있어요. (Releases 섹션이 안 보이면 저장소 URL 끝에 /releases를 붙여보세요. 예: github.com/사용자이름/YTLite/releases)</li>
   </ol>
 </details>
 
-
 <details>
-  <summary>How to build the YouTube Plus app with your own link for the YouTube Plus tweak</summary>
+  <summary>직접 구한 YouTube Plus 트윅 파일로 빌드하는 방법</summary>
   <ol>
     <blockquote>
-      <p><strong>NOTE:</strong> This option is primarily intended for building the YouTube Plus app based on the beta file you have. In other cases, it is generally not needed.</p>
+      <p><strong>주의:</strong> 이 옵션은 주로 직접 가지고 있는 베타 파일로 빌드할 때 사용해요. 일반적인 경우엔 필요 없어요.</p>
     </blockquote>
-    <li>Click on <strong>Sync fork</strong>, and if your branch is out-of-date, click on <strong>Update branch</strong>.</li>
-    <li>Navigate to the <strong>Actions tab</strong> in your forked repository and select <strong>[BETA] Build YouTube Plus app</strong>.</li>
-    <li>Click the <strong>Run workflow</strong> button located on the right side.</li>
-    <li>Mark or unmark the tweaks you want to integrate. Learn more about them in the <a href="#tweak-integration-details">Tweak Integration Details</a> section.</li>
-    <li>Prepare a decrypted .ipa file <em>(we cannot provide this due to legal reasons)</em>, then upload it to a file provider (e.g., filebin.net, filemail.com, or Dropbox is recommended). Paste the URL of the decrypted IPA file in the provided field.</li>
-    <li>Upload your beta tweak file to a file provider and paste direct link to the <strong>URL to the YouTube Plus tweak file</strong> field. You can also change the BundleID and Display Name if desired.</li>
-    <li><strong>NOTE:</strong> Make sure to provide a direct download link to the file, not a link to a webpage. Otherwise, the process will fail.</li>
-    <li>Make sure all inputs are correct, then click <strong>Run workflow</strong> to start the process.</li>
-    <li>Wait for the build to finish. You can download the YouTube Plus app from the releases section of your forked repo. (If you can't find the releases section, go to your forked repo and add /releases to the URL, i.e., github.com/user/YTLite/releases.)</li>
+    <li><strong>Sync fork</strong>를 클릭하고, 브랜치가 오래됐다면 <strong>Update branch</strong>를 눌러 최신화하세요.</li>
+    <li>포크한 저장소의 <strong>Actions 탭</strong>으로 이동해서 <strong>[BETA] Build YouTube Plus app</strong>을 선택하세요.</li>
+    <li>오른쪽의 <strong>Run workflow</strong> 버튼을 클릭하세요.</li>
+    <li>원하는 트윅을 체크/해제하세요. 자세한 내용은 <a href="#통합-트윅-상세-정보">통합 트윅 상세 정보</a> 섹션을 참고하세요.</li>
+    <li>복호화된 .ipa 파일을 준비한 뒤 파일 공유 서비스에 업로드하고, 직접 다운로드 링크를 붙여넣으세요.</li>
+    <li>베타 트윅 파일도 파일 공유 서비스에 업로드한 뒤 직접 링크를 <strong>YouTube Plus tweak file URL</strong> 입력란에 붙여넣으세요. BundleID와 표시 이름도 원하면 바꿀 수 있어요.</li>
+    <li><strong>주의:</strong> 웹페이지 링크가 아니라 파일 직접 다운로드 링크여야 해요. 아니면 빌드가 실패해요.</li>
+    <li>입력값을 확인한 후 <strong>Run workflow</strong>를 눌러 빌드를 시작하세요.</li>
+    <li>빌드가 끝나면 포크한 저장소의 Releases 섹션에서 앱을 다운로드할 수 있어요.</li>
   </ol>
 </details>
 
-## Supported YouTube Version
+## 지원 YouTube 버전
 <ul>
-   <li><strong>Latest confirmed:</strong> <em>21.16.2</em></li>
-   <li><strong>Date tested:</strong> <em>Apr 23, 2026</em></li>
-   <li><strong>YouTube Plus:</strong> <em>5.2.1</em></li>
+   <li><strong>최근 확인된 버전:</strong> <em>21.16.2</em></li>
+   <li><strong>테스트 날짜:</strong> <em>2026년 4월 23일</em></li>
+   <li><strong>YouTube Plus 버전:</strong> <em>5.2.1</em></li>
 </ul>
 
-## Tweak Integration Details
+## 통합 트윅 상세 정보
 <details>
   <summary>YouPiP</summary>
-  <p>YouPiP is a tweak developed by <a href="https://github.com/PoomSmart">PoomSmart</a> that enables the native Picture-in-Picture feature for videos in the iOS YouTube app.</p>
-  <p><strong>YouPiP preferences</strong> are available in the <strong>YouTube settings</strong>.</p>
-  <p>Source code and additional information are available <a href="https://github.com/PoomSmart/YouPiP">in PoomSmart's GitHub repository</a>.</p>
+  <p>YouPiP은 <a href="https://github.com/PoomSmart">PoomSmart</a>이 개발한 트윅으로, iOS YouTube 앱에서 네이티브 PiP(화면 속 화면) 기능을 활성화해요.</p>
+  <p><strong>YouPiP 설정</strong>은 <strong>YouTube 설정</strong> 안에 있어요.</p>
+  <p>소스 코드 및 추가 정보는 <a href="https://github.com/PoomSmart/YouPiP">PoomSmart의 GitHub 저장소</a>에서 확인할 수 있어요.</p>
 </details>
 
 <details>
   <summary>YTUHD</summary>
-  <p>YTUHD is a tweak developed by <a href="https://github.com/PoomSmart">PoomSmart</a> that unlocks 1440p (2K) and 2160p (4K) resolutions in the iOS YouTube app.</p>
-  <p><strong>YTUHD preferences</strong> are available in the <strong>Video quality preferences</strong> section under <strong>YouTube settings</strong>.</p>
-  <p>Source code and additional information are available <a href="https://github.com/PoomSmart/YTUHD">in PoomSmart's GitHub repository</a>.</p>
+  <p>YTUHD는 <a href="https://github.com/PoomSmart">PoomSmart</a>이 개발한 트윅으로, iOS YouTube 앱에서 1440p(2K) 및 2160p(4K) 해상도를 잠금 해제해요.</p>
+  <p><strong>YTUHD 설정</strong>은 <strong>YouTube 설정</strong>의 <strong>동영상 화질 설정</strong> 섹션에 있어요.</p>
+  <p>소스 코드 및 추가 정보는 <a href="https://github.com/PoomSmart/YTUHD">PoomSmart의 GitHub 저장소</a>에서 확인할 수 있어요.</p>
 </details>
 
 <details>
   <summary>Return YouTube Dislikes</summary>
-  <p>Return YouTube Dislikes is a tweak developed by <a href="https://github.com/PoomSmart">PoomSmart</a> that brings back dislikes on the YouTube app.</p>
-  <p><strong>Return YouTube Dislikes preferences</strong> are available in the <strong>YouTube settings</strong>.</p>
-  <p>Source code and additional information are available <a href="https://github.com/PoomSmart/Return-YouTube-Dislikes">in PoomSmart's GitHub repository</a>.</p>
+  <p>Return YouTube Dislikes는 <a href="https://github.com/PoomSmart">PoomSmart</a>이 개발한 트윅으로, YouTube 앱에서 싫어요 수를 다시 보여줘요.</p>
+  <p><strong>Return YouTube Dislikes 설정</strong>은 <strong>YouTube 설정</strong> 안에 있어요.</p>
+  <p>소스 코드 및 추가 정보는 <a href="https://github.com/PoomSmart/Return-YouTube-Dislikes">PoomSmart의 GitHub 저장소</a>에서 확인할 수 있어요.</p>
 </details>
 
 <details>
   <summary>YouQuality</summary>
-  <p>YouQuality is a tweak developed by <a href="https://github.com/PoomSmart">PoomSmart</a> that allows to view and change video quality directly from the video overlay.</p>
-  <p><strong>YouQuality can be enabled</strong> in the <strong>Video overlay</strong> section under <strong>YouTube settings</strong>.</p>
-  <p>Source code and additional information are available <a href="https://github.com/PoomSmart/YouQuality">in PoomSmart's GitHub repository</a>.</p>
+  <p>YouQuality는 <a href="https://github.com/PoomSmart">PoomSmart</a>이 개발한 트윅으로, 동영상 오버레이에서 바로 화질을 확인하고 변경할 수 있어요.</p>
+  <p><strong>YouQuality 활성화</strong>는 <strong>YouTube 설정</strong>의 <strong>동영상 오버레이</strong> 섹션에서 할 수 있어요.</p>
+  <p>소스 코드 및 추가 정보는 <a href="https://github.com/PoomSmart/YouQuality">PoomSmart의 GitHub 저장소</a>에서 확인할 수 있어요.</p>
 </details>
 
 <details>
   <summary>DontEatMyContent</summary>
-  <p>DontEatMyContent is a tweak developed by <a href="https://github.com/therealFoxster">therealFoxster</a> that prevents the Notch/Dynamic Island from munching on 2:1 video content in the iOS YouTube app.</p>
-  <p><strong>DontEatMyContent preferences</strong> are available in the <strong>YouTube settings</strong>.</p>
-  <p>Source code and additional information are available <a href="https://github.com/therealFoxster/DontEatMyContent">in therealFoxster's GitHub repository</a>.</p>
+  <p>DontEatMyContent는 <a href="https://github.com/therealFoxster">therealFoxster</a>가 개발한 트윅으로, iOS YouTube 앱에서 노치/다이나믹 아일랜드가 2:1 비율 동영상 콘텐츠를 가리는 문제를 해결해줘요.</p>
+  <p><strong>DontEatMyContent 설정</strong>은 <strong>YouTube 설정</strong> 안에 있어요.</p>
+  <p>소스 코드 및 추가 정보는 <a href="https://github.com/therealFoxster/DontEatMyContent">therealFoxster의 GitHub 저장소</a>에서 확인할 수 있어요.</p>
 </details>
