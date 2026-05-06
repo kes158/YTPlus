@@ -315,52 +315,6 @@ jobs:
             ' "$BUILD_DIR/DontEatMyContent/Tweak.x" 2>/dev/null || true
           fi
 
-          # ── 5-1단계: YouChooseQuality 한국어 로컬라이제이션 주입 ───────
-          if [[ -d "$BUILD_DIR/YouChooseQuality" ]]; then
-            echo ""
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "  YouChooseQuality 한국어 로컬라이제이션 주입"
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            
-            YCQ_BUNDLE=$(find "$BUILD_DIR/YouChooseQuality/layout" -type d -name "*.bundle" 2>/dev/null | head -1)
-            
-            if [[ -n "$YCQ_BUNDLE" ]]; then
-              echo "  번들 경로: $YCQ_BUNDLE"
-              echo "  번들 내부 구조:"
-              find "$YCQ_BUNDLE" -type f | sed 's/^/    /'
-
-              mkdir -p "$YCQ_BUNDLE/ko.lproj"
-
-              # Root.strings + Localizable.strings 두 파일 모두 생성
-              # (PreferenceLoader UI용 Root.strings, 트윅 내부용 Localizable.strings)
-              for _FNAME in Root.strings Localizable.strings; do
-                _DEST="$YCQ_BUNDLE/ko.lproj/$_FNAME"
-                printf '"TWEAK_NAME" = "YouChooseQuality";\n'           > "$_DEST"
-                printf '"TWEAK_DESC" = "각 상황별로 지정한 화질과 동일하거나 가장 가까운 화질을 자동으로 선택합니다.";\n' >> "$_DEST"
-                printf '"ENABLED" = "활성화";\n'                        >> "$_DEST"
-                printf '"QUALITY_FOR_SCENARIO_0_SHORT" = "Wi-Fi";\n'    >> "$_DEST"
-                printf '"QUALITY_FOR_SCENARIO_0" = "Wi-Fi 연결 시 기본 화질";\n'            >> "$_DEST"
-                printf '"QUALITY_FOR_SCENARIO_1_SHORT" = "셀룰러";\n'   >> "$_DEST"
-                printf '"QUALITY_FOR_SCENARIO_1" = "셀룰러(모바일 데이터) 연결 시 기본 화질";\n' >> "$_DEST"
-                printf '"QUALITY_FOR_SCENARIO_2_SHORT" = "Wi-Fi (AirPlay)";\n'              >> "$_DEST"
-                printf '"QUALITY_FOR_SCENARIO_2" = "AirPlay 사용 중 Wi-Fi 연결 시 기본 화질";\n' >> "$_DEST"
-                printf '"QUALITY_FOR_SCENARIO_3_SHORT" = "셀룰러 (AirPlay)";\n'             >> "$_DEST"
-                printf '"QUALITY_FOR_SCENARIO_3" = "AirPlay 사용 중 셀룰러 연결 시 기본 화질";\n' >> "$_DEST"
-                printf '"QUALITY_FOR_SCENARIO_4_SHORT" = "저전력 모드";\n'                  >> "$_DEST"
-                printf '"QUALITY_FOR_SCENARIO_4" = "저전력 모드 활성화 시 기본 화질";\n'   >> "$_DEST"
-                echo "  ko.lproj/$_FNAME 생성 완료"
-              done
-
-              # 기존 strings 파일 확인 (디버그)
-              find "$YCQ_BUNDLE" -name "*.strings" | grep -v "ko.lproj" | head -3 | while IFS= read -r _F; do
-                echo "  기존: $_F"
-                head -5 "$_F" | sed 's/^/    /'
-              done
-            else
-              echo "  YouChooseQuality bundle을 찾을 수 없습니다"
-            fi
-          fi
-
           # ── 6단계: 병렬 빌드 ────────────────────────────────────────
           echo ""
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -474,57 +428,6 @@ jobs:
             echo "cyan을 찾을 수 없습니다: $CYAN"
             ls -la "$CYAN_BIN_DIR" || true
             exit 1
-          fi
-
-          # ── YouChooseQuality deb에 한국어 로컬라이제이션 직접 주입 ──
-          # 캐시 히트 시 소스 빌드 단계가 스킵되므로 여기서 deb를 직접 수정
-          YCQ_DEB=$(find "${{ github.workspace }}/ready_packages" -name "YouChooseQuality_*.deb" | head -1)
-          if [[ -n "$YCQ_DEB" ]]; then
-            echo "YouChooseQuality deb 한국어 로컬라이제이션 주입 중..."
-            YCQ_TMP=$(mktemp -d)
-            cd "$YCQ_TMP"
-            ar x "$YCQ_DEB"
-
-            if [[ -f data.tar.xz ]]; then
-              tar -xf data.tar.xz
-            elif [[ -f data.tar.lzma ]]; then
-              tar -xf data.tar.lzma
-            elif [[ -f data.tar.gz ]]; then
-              tar -xzf data.tar.gz
-            fi
-
-            echo "  번들 구조:"
-            find . -name "*.bundle" -o -name "*.strings" | sed 's/^/    /'
-
-            YCQ_BUNDLE=$(find . -type d -name "*.bundle" | head -1)
-            if [[ -n "$YCQ_BUNDLE" ]]; then
-              mkdir -p "$YCQ_BUNDLE/ko.lproj"
-              for _F in Root.strings Localizable.strings; do
-                _DEST="$YCQ_BUNDLE/ko.lproj/$_F"
-                printf '"TWEAK_NAME" = "YouChooseQuality";\n'           > "$_DEST"
-                printf '"TWEAK_DESC" = "각 상황별로 지정한 화질과 동일하거나 가장 가까운 화질을 자동으로 선택합니다.";\n' >> "$_DEST"
-                printf '"ENABLED" = "활성화";\n'                        >> "$_DEST"
-                printf '"QUALITY_FOR_SCENARIO_0_SHORT" = "Wi-Fi";\n'    >> "$_DEST"
-                printf '"QUALITY_FOR_SCENARIO_0" = "Wi-Fi 연결 시 기본 화질";\n'                  >> "$_DEST"
-                printf '"QUALITY_FOR_SCENARIO_1_SHORT" = "셀룰러";\n'   >> "$_DEST"
-                printf '"QUALITY_FOR_SCENARIO_1" = "셀룰러(모바일 데이터) 연결 시 기본 화질";\n' >> "$_DEST"
-                printf '"QUALITY_FOR_SCENARIO_2_SHORT" = "Wi-Fi (AirPlay)";\n'                    >> "$_DEST"
-                printf '"QUALITY_FOR_SCENARIO_2" = "AirPlay 사용 중 Wi-Fi 연결 시 기본 화질";\n' >> "$_DEST"
-                printf '"QUALITY_FOR_SCENARIO_3_SHORT" = "셀룰러 (AirPlay)";\n'                   >> "$_DEST"
-                printf '"QUALITY_FOR_SCENARIO_3" = "AirPlay 사용 중 셀룰러 연결 시 기본 화질";\n' >> "$_DEST"
-                printf '"QUALITY_FOR_SCENARIO_4_SHORT" = "저전력 모드";\n'                        >> "$_DEST"
-                printf '"QUALITY_FOR_SCENARIO_4" = "저전력 모드 활성화 시 기본 화질";\n'         >> "$_DEST"
-                echo "  ✅ ko.lproj/$_F 추가"
-              done
-              # data 재압축 후 deb 재조립
-              tar -cJf data.tar.xz $(find . -mindepth 1 -maxdepth 1 -not -name "*.tar.*" -not -name "debian-binary" | tr '\n' ' ') 2>/dev/null || true
-              ar rcs "$YCQ_DEB" debian-binary control.tar.* data.tar.xz
-              echo "  ✅ YouChooseQuality deb 재패키징 완료"
-            else
-              echo "  ⚠️  번들 없음, 로컬라이제이션 건너뜀"
-            fi
-            cd "${{ github.workspace }}"
-            rm -rf "$YCQ_TMP"
           fi
 
           DEBS=$(find "${{ github.workspace }}/ready_packages" -name "*.deb" | sort | tr '\n' ' ')
