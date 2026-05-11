@@ -567,7 +567,7 @@ jobs:
               exit 1
             fi
           fi
-          if [[ "${{ github.event.inputs.enable_ytuhd }}" == "true" ]] && ! find "$READY_DIR" -name "YTUHD*.deb" -print -quit | grep -q .; then
+          if [[ "${{ github.event.inputs.enable_ytuhd }}" == "true" ]] && ! find "$READY_DIR" \( -name "YTUHD*.deb" -o -name "com.ps.ytuhd*.deb" \) -print -quit | grep -q .; then
             echo "YTUHD is enabled but no YTUHD deb is ready"
             exit 1
           fi
