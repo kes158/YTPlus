@@ -184,15 +184,9 @@ jobs:
           REPOS=(
             "YouTubeHeader|https://github.com/PoomSmart/YouTubeHeader.git|true"
             "PSHeader|https://github.com/PoomSmart/PSHeader.git|true"
-            "YTVideoOverlay|https://github.com/PoomSmart/YTVideoOverlay.git|true"
             "DontEatMyContent|https://github.com/therealFoxster/DontEatMyContent.git|${{ github.event.inputs.enable_demc }}"
-            "YouPiP|https://github.com/PoomSmart/YouPiP.git|${{ github.event.inputs.enable_youpip }}"
-            "YouQuality|https://github.com/PoomSmart/YouQuality.git|${{ github.event.inputs.enable_yq }}"
-            "YouChooseQuality|https://github.com/PoomSmart/YouChooseQuality.git|${{ github.event.inputs.enable_ycq }}"
             "Return-YouTube-Dislikes|https://github.com/PoomSmart/Return-YouTube-Dislikes.git|${{ github.event.inputs.enable_ryd }}"
-            "YTABConfig|https://github.com/PoomSmart/YTABConfig.git|${{ github.event.inputs.enable_ytabc }}"
             "YouLoop|https://github.com/bhackel/YouLoop.git|${{ github.event.inputs.enable_youloop }}"
-            "YouSpeed|https://github.com/PoomSmart/YouSpeed.git|${{ github.event.inputs.enable_youspeed }}"
           )
 
           CACHE_DIR="${{ github.workspace }}/tweaks"
@@ -319,6 +313,8 @@ jobs:
           if [[ "${{ github.event.inputs.enable_ytuhd }}" == "true" ]]; then
             echo "Prepare pinned YouGroupSettings dependency"
             cache_repo_deb_version "https://repo.chariz.com" "com.ps.yougroupsettings" "1.0.8" "YouGroupSettings" "YouGroupSettings_1.0.8.deb"
+            echo "Prepare official YTVideoOverlay dependency"
+            cache_repo_deb "https://poomsmart.github.io/repo" "com.ps.ytvideooverlay" "YTVideoOverlay" "YTVideoOverlay_official.deb"
             echo "Prepare official YTUHD deb"
             cache_repo_deb "https://poomsmart.github.io/repo" "com.ps.ytuhd" "YTUHD" "YTUHD_official.deb"
             echo "Prepare libundirect dependency"
@@ -326,6 +322,29 @@ jobs:
           else
             echo "Prepare pinned YouGroupSettings dependency"
             cache_repo_deb_version "https://repo.chariz.com" "com.ps.yougroupsettings" "1.0.8" "YouGroupSettings" "YouGroupSettings_1.0.8.deb"
+            echo "Prepare official YTVideoOverlay dependency"
+            cache_repo_deb "https://poomsmart.github.io/repo" "com.ps.ytvideooverlay" "YTVideoOverlay" "YTVideoOverlay_official.deb"
+          fi
+
+          if [[ "${{ github.event.inputs.enable_youpip }}" == "true" ]]; then
+            echo "Prepare official YouPiP deb"
+            cache_repo_deb "https://poomsmart.github.io/repo" "com.ps.youpip" "YouPiP" "YouPiP_official.deb"
+          fi
+          if [[ "${{ github.event.inputs.enable_yq }}" == "true" ]]; then
+            echo "Prepare official YouQuality deb"
+            cache_repo_deb "https://poomsmart.github.io/repo" "com.ps.youquality" "YouQuality" "YouQuality_official.deb"
+          fi
+          if [[ "${{ github.event.inputs.enable_ycq }}" == "true" ]]; then
+            echo "Prepare official YouChooseQuality deb"
+            cache_repo_deb "https://poomsmart.github.io/repo" "com.ps.youchoosequality" "YouChooseQuality" "YouChooseQuality_official.deb"
+          fi
+          if [[ "${{ github.event.inputs.enable_ytabc }}" == "true" ]]; then
+            echo "Prepare official YTABConfig deb"
+            cache_repo_deb "https://poomsmart.github.io/repo" "com.ps.ytabconfig" "YTABConfig" "YTABConfig_official.deb"
+          fi
+          if [[ "${{ github.event.inputs.enable_youspeed }}" == "true" ]]; then
+            echo "Prepare official YouSpeed deb"
+            cache_repo_deb "https://poomsmart.github.io/repo" "com.ps.youspeed" "YouSpeed" "YouSpeed_official.deb"
           fi
 
           echo "Fetch latest SHAs"
