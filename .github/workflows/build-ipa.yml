@@ -26,7 +26,7 @@ on:
       enable_ytabc_reset:
         description: "YTABConfigReset"
         required: true
-        default: true
+        default: false
         type: boolean
       enable_demc:     { description: "DontEatMyContent",        default: true, type: boolean }
       enable_youloop:  { description: "YouLoop",                 default: true, type: boolean }
