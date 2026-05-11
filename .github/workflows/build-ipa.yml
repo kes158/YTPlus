@@ -308,6 +308,28 @@ jobs:
             fi
           }
 
+          cache_direct_deb() {
+            local url="$1"
+            local cache_name="$2"
+            local output_name="$3"
+            local cache_key cached target
+
+            cache_key="$(printf "%s" "$url" | shasum -a 256 | awk '{print substr($1, 1, 12)}')"
+            cached="$(find "$CACHE_DIR" -maxdepth 1 -name "${cache_name}_direct_${cache_key}.deb" -print -quit 2>/dev/null || true)"
+            target="$READY_DIR/$output_name"
+
+            if [[ -n "$cached" ]]; then
+              echo "  direct cache hit $cache_name ($cache_key)"
+              cp "$cached" "$target"
+            else
+              echo "  direct cache miss $cache_name ($cache_key), downloading"
+              curl -fL --retry 5 "$url" -o "$target"
+              rm -f "$CACHE_DIR/${cache_name}_direct_"*.deb
+              cp "$target" "$CACHE_DIR/${cache_name}_direct_${cache_key}.deb"
+              touch "$SHA_STORE/CACHE_UPDATED"
+            fi
+          }
+
           echo "Copy local patched debs"
           for deb in "$CACHE_DIR"/*.deb; do
             [[ -f "$deb" ]] || continue
@@ -324,10 +346,8 @@ jobs:
           cache_repo_deb_version "https://repo.chariz.com" "com.ps.yougroupsettings" "1.0.7" "YouGroupSettings" "YouGroupSettings_1.0.7.deb"
 
           if [[ "${{ github.event.inputs.enable_ytuhd }}" == "true" ]]; then
-            echo "Prepare official YTUHD deb"
-            cache_repo_deb "https://poomsmart.github.io/repo" "com.ps.ytuhd" "YTUHD" "YTUHD_official.deb"
-            echo "Prepare libundirect dependency"
-            cache_repo_deb "https://opa334.github.io" "com.opa334.libundirect" "libundirect" "libundirect.deb"
+            echo "Prepare settings-safe YTUHD 1.6.6 deb"
+            cache_direct_deb "https://poomsmart.github.io/repo/debs/com.ps.ytuhd_1.6.6_iphoneos-arm.deb" "YTUHD" "YTUHD_1.6.6.deb"
           fi
 
           if [[ "${{ github.event.inputs.enable_ytabc }}" == "true" ]]; then
