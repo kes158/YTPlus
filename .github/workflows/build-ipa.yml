@@ -17,7 +17,6 @@ on:
         required: true
         default: "com.google.ios.youtube"
         type: string
-        
       enable_youpip:   { description: "YouPiP",                  default: true, type: boolean }
       enable_ytuhd:    { description: "YTUHD",                   default: true, type: boolean }
       enable_yq:       { description: "YouQuality",              default: true, type: boolean }
@@ -77,11 +76,12 @@ jobs:
         run: |
           set -euo pipefail
 
-          NEED_BREW=()
+          NEED_BREW=("")
           for pkg in make ldid dpkg; do
             brew list "$pkg" >/dev/null 2>&1 || NEED_BREW+=("$pkg")
           done
-          if [[ ${#NEED_BREW[@]} -gt 0 ]]; then
+          if [[ ${#NEED_BREW[@]} -gt 1 ]]; then
+            NEED_BREW=("${NEED_BREW[@]:1}")
             brew install "${NEED_BREW[@]}"
           else
             echo "Homebrew tools already installed"
@@ -296,7 +296,7 @@ jobs:
 
           echo "Resolve cache and clone misses"
           CLONE_PIDS=("")
-          CLONE_LIST=()
+          CLONE_LIST=("")
           for repo in "${REPOS[@]}"; do
             NAME="${repo%%|*}"
             rest="${repo#*|}"
@@ -359,6 +359,7 @@ jobs:
           export DEBUG=0 FINALPACKAGE=1 SIDELOAD=1 SDKVERSION=16.5
           BUILD_PIDS=("")
           for NAME in "${CLONE_LIST[@]}"; do
+            [[ -n "$NAME" ]] || continue
             DIR="$BUILD_DIR/$NAME"
             SHA="$(cat "$SHA_STORE/${NAME}.sha" 2>/dev/null || echo unknown)"
 
@@ -439,10 +440,15 @@ jobs:
             exit 1
           fi
 
-          DEBS=()
+          DEBS=("")
           while IFS= read -r deb; do
             DEBS+=("$deb")
           done < <(find "${{ github.workspace }}/ready_packages" -name "*.deb" | sort)
+          DEBS=("${DEBS[@]:1}")
+          if [[ ${#DEBS[@]} -eq 0 ]]; then
+            echo "No deb files found for injection"
+            exit 1
+          fi
           printf "Injecting debs:\n"
           printf "  %s\n" "${DEBS[@]}"
 
