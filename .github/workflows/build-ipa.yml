@@ -184,7 +184,6 @@ jobs:
           REPOS=(
             "YouTubeHeader|https://github.com/PoomSmart/YouTubeHeader.git|true"
             "PSHeader|https://github.com/PoomSmart/PSHeader.git|true"
-            "YouGroupSettings|https://github.com/PoomSmart/YouGroupSettings.git|true"
             "YTVideoOverlay|https://github.com/PoomSmart/YTVideoOverlay.git|true"
             "DontEatMyContent|https://github.com/therealFoxster/DontEatMyContent.git|${{ github.event.inputs.enable_demc }}"
             "YouPiP|https://github.com/PoomSmart/YouPiP.git|${{ github.event.inputs.enable_youpip }}"
@@ -215,7 +214,7 @@ jobs:
             curl -fsSL --retry 5 "${base_url%/}/Packages" -o "$packages_file"
             file_url="$(
               awk -v pkg="$package_id" '
-                BEGIN { RS=""; FS="\n" }
+                BEGIN { RS=""; FS="\n"; filename = "" }
                 {
                   package_name = architecture = filename = ""
                   for (i = 1; i <= NF; i++) {
@@ -224,10 +223,10 @@ jobs:
                     if ($i ~ /^Filename: /) filename = substr($i, 11)
                   }
                   if (package_name == pkg && architecture == "iphoneos-arm") {
-                    print filename
-                    exit
+                    selected = filename
                   }
                 }
+                END { print selected }
               ' "$packages_file"
             )"
             rm -f "$packages_file"
@@ -266,10 +265,15 @@ jobs:
           done
 
           if [[ "${{ github.event.inputs.enable_ytuhd }}" == "true" ]]; then
+            echo "Prepare official YouGroupSettings dependency"
+            cache_repo_deb "https://repo.chariz.com" "com.ps.yougroupsettings" "YouGroupSettings" "YouGroupSettings_official.deb"
             echo "Prepare official YTUHD deb"
             cache_repo_deb "https://poomsmart.github.io/repo" "com.ps.ytuhd" "YTUHD" "YTUHD_official.deb"
             echo "Prepare libundirect dependency"
             cache_repo_deb "https://opa334.github.io" "com.opa334.libundirect" "libundirect" "libundirect.deb"
+          elif [[ "${{ github.event.inputs.enable_ytabc }}" == "true" || "${{ github.event.inputs.enable_youpip }}" == "true" || "${{ github.event.inputs.enable_yq }}" == "true" || "${{ github.event.inputs.enable_ycq }}" == "true" || "${{ github.event.inputs.enable_ryd }}" == "true" || "${{ github.event.inputs.enable_demc }}" == "true" ]]; then
+            echo "Prepare official YouGroupSettings dependency"
+            cache_repo_deb "https://repo.chariz.com" "com.ps.yougroupsettings" "YouGroupSettings" "YouGroupSettings_official.deb"
           fi
 
           echo "Fetch latest SHAs"
@@ -440,10 +444,25 @@ jobs:
             exit 1
           fi
 
+          ALL_DEBS_FILE="$(mktemp)"
+          find "${{ github.workspace }}/ready_packages" -name "*.deb" | sort > "$ALL_DEBS_FILE"
+
           DEBS=("")
+          for pattern in "libundirect" "YouGroupSettings" "YTVideoOverlay"; do
+            while IFS= read -r deb; do
+              [[ -n "$deb" ]] || continue
+              DEBS+=("$deb")
+            done < <(grep "/.*${pattern}.*\.deb$" "$ALL_DEBS_FILE" || true)
+          done
           while IFS= read -r deb; do
+            [[ -n "$deb" ]] || continue
+            case "$(basename "$deb")" in
+              *libundirect*.deb|*YouGroupSettings*.deb|*YTVideoOverlay*.deb) continue ;;
+            esac
             DEBS+=("$deb")
-          done < <(find "${{ github.workspace }}/ready_packages" -name "*.deb" | sort)
+          done < "$ALL_DEBS_FILE"
+          rm -f "$ALL_DEBS_FILE"
+
           DEBS=("${DEBS[@]:1}")
           if [[ ${#DEBS[@]} -eq 0 ]]; then
             echo "No deb files found for injection"
