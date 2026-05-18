@@ -402,6 +402,12 @@ jobs:
               if [[ -n "$CACHED" && "$LATEST_SHA" != "unknown" ]]; then
                 echo "  deb cache hit $NAME ($LATEST_SHA)"
                 cp "$CACHED" "$READY_DIR/"
+                # YTVideoOverlay는 deb 캐시 히트 시에도 소스가 필요하므로 클론 목록에 추가
+                if [[ "$NAME" == "YTVideoOverlay" ]]; then
+                  echo "  clone YTVideoOverlay source for header imports (deb cache hit)"
+                  git clone --quiet --depth 1 "$URL" "$BUILD_DIR/$NAME" &
+                  CLONE_PIDS+=("$!")
+                fi
               else
                 echo "  clone $NAME ($LATEST_SHA)"
                 if [[ "$NAME" == "YTUHD" && "${{ github.event.inputs.ytuhd_ref }}" != "master" ]]; then
@@ -643,3 +649,4 @@ jobs:
           overwrite_files: true
           make_latest: true
           token: ${{ secrets.GITHUB_TOKEN }}
+          
